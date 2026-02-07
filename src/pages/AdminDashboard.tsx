@@ -60,14 +60,18 @@ export default function AdminDashboard() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      // Fetch users with roles
-      const { data: profiles } = await supabase
+      // Fetch users with roles - the query uses a JOIN via foreign key
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('*, user_roles(role)');
       
-      if (profiles) {
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        toast.error('Failed to load user profiles');
+      } else if (profiles) {
+        console.log('Fetched profiles:', profiles.length);
         setUsers(profiles);
-        // Filter teachers and students
+        // Filter teachers and students based on role
         setTeachers(profiles.filter((p: any) => p.user_roles?.some((r: any) => r.role === 'teacher')));
         setStudents(profiles.filter((p: any) => p.user_roles?.some((r: any) => r.role === 'student')));
       }
