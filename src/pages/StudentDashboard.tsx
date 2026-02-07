@@ -61,10 +61,12 @@ export default function StudentDashboard() {
         setEnrollments(enrollmentsData);
         
         // Initialize simulator grades
+        // Note: grades is a single object (one-to-one), not an array
         const initial: Record<string, number> = {};
         enrollmentsData.forEach((e: any) => {
-          if (e.grades?.[0]) {
-            initial[e.id] = e.grades[0].marks;
+          const grade = Array.isArray(e.grades) ? e.grades[0] : e.grades;
+          if (grade?.marks !== undefined) {
+            initial[e.id] = grade.marks;
           }
         });
         setSimulatorGrades(initial);
@@ -102,7 +104,8 @@ export default function StudentDashboard() {
       );
 
       const subjects: SubjectGrade[] = semesterEnrollments.map((e: any) => {
-        const grade = e.grades?.[0];
+        // Handle grades as either array or single object (one-to-one relation)
+        const grade = Array.isArray(e.grades) ? e.grades[0] : e.grades;
         return {
           subjectCode: e.subjects.code,
           subjectName: e.subjects.name,
