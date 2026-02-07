@@ -102,83 +102,139 @@ Deno.serve(async (req) => {
       console.log('No admin exists, allowing first admin signup');
     }
 
-    // Create the auth user
-    const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
-      email: body.email,
-      password: body.password,
-      email_confirm: true, // Auto-confirm for demo stability
-      user_metadata: {
-        full_name: body.full_name,
-        role: body.role,
-        student_id: body.student_id
-      }
-    });
-
-    if (authError) {
-      console.error('Error creating auth user:', authError);
+    // Check if user already exists in auth (handles orphaned users from failed signups)
+    const { data: existingUsers } = await adminClient.auth.admin.listUsers();
+    const existingUser = existingUsers?.users?.find(u => u.email === body.email);
+    
+    let userId: string;
+    
+    if (existingUser) {
+      console.log('Found existing auth user:', existingUser.id);
       
-      if (authError.message.includes('already been registered')) {
+      // Check if this user already has a complete profile and role
+      const { data: existingProfile } = await adminClient
+        .from('profiles')
+        .select('id')
+        .eq('id', existingUser.id)
+        .maybeSingle();
+      
+      const { data: existingRole } = await adminClient
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', existingUser.id)
+        .maybeSingle();
+      
+      if (existingProfile && existingRole) {
+        // User is fully set up, return conflict
         return new Response(
-          JSON.stringify({ error: 'Conflict', message: 'A user with this email already exists' }),
+          JSON.stringify({ error: 'Conflict', message: 'A user with this email already exists. Please sign in instead.' }),
           { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      return new Response(
-        JSON.stringify({ error: 'Internal Server Error', message: authError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!authData.user) {
-      return new Response(
-        JSON.stringify({ error: 'Internal Server Error', message: 'User creation failed' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const userId = authData.user.id;
-    console.log('Auth user created:', userId);
-
-    // Create profile using service role (bypasses RLS)
-    const { error: profileError } = await adminClient
-      .from('profiles')
-      .insert({
-        id: userId,
+      // User exists in auth but is incomplete - we'll complete their setup
+      console.log('Completing setup for orphaned auth user');
+      userId = existingUser.id;
+      
+      // Update password if needed
+      await adminClient.auth.admin.updateUserById(userId, {
+        password: body.password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: body.full_name,
+          role: body.role,
+          student_id: body.student_id
+        }
+      });
+    } else {
+      // Create new auth user
+      const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
         email: body.email,
-        full_name: body.full_name,
-        student_id: body.role === 'student' ? body.student_id : null
+        password: body.password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: body.full_name,
+          role: body.role,
+          student_id: body.student_id
+        }
       });
 
-    if (profileError) {
-      console.error('Error creating profile:', profileError);
-      // Rollback: delete the auth user
-      await adminClient.auth.admin.deleteUser(userId);
-      return new Response(
-        JSON.stringify({ error: 'Internal Server Error', message: 'Failed to create user profile' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (authError) {
+        console.error('Error creating auth user:', authError);
+        return new Response(
+          JSON.stringify({ error: 'Internal Server Error', message: authError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!authData.user) {
+        return new Response(
+          JSON.stringify({ error: 'Internal Server Error', message: 'User creation failed' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      userId = authData.user.id;
+      console.log('Auth user created:', userId);
     }
 
-    console.log('Profile created for:', userId);
+    // Create profile if it doesn't exist
+    const { data: existingProfile } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
 
-    // Create user role
-    const { error: roleError } = await adminClient
+    if (!existingProfile) {
+      const { error: profileError } = await adminClient
+        .from('profiles')
+        .insert({
+          id: userId,
+          email: body.email,
+          full_name: body.full_name,
+          student_id: body.role === 'student' ? body.student_id : null
+        });
+
+      if (profileError) {
+        console.error('Error creating profile:', profileError);
+        await adminClient.auth.admin.deleteUser(userId);
+        return new Response(
+          JSON.stringify({ error: 'Internal Server Error', message: 'Failed to create user profile' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      console.log('Profile created for:', userId);
+    } else {
+      console.log('Profile already exists for:', userId);
+    }
+
+    // Create user role if it doesn't exist
+    const { data: existingRole } = await adminClient
       .from('user_roles')
-      .insert({
-        user_id: userId,
-        role: body.role
-      });
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    if (roleError) {
-      console.error('Error creating role:', roleError);
-      // Rollback: delete profile and auth user
-      await adminClient.from('profiles').delete().eq('id', userId);
-      await adminClient.auth.admin.deleteUser(userId);
-      return new Response(
-        JSON.stringify({ error: 'Internal Server Error', message: 'Failed to assign user role' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!existingRole) {
+      const { error: roleError } = await adminClient
+        .from('user_roles')
+        .insert({
+          user_id: userId,
+          role: body.role
+        });
+
+      if (roleError) {
+        console.error('Error creating role:', roleError);
+        await adminClient.from('profiles').delete().eq('id', userId);
+        await adminClient.auth.admin.deleteUser(userId);
+        return new Response(
+          JSON.stringify({ error: 'Internal Server Error', message: 'Failed to assign user role' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      console.log('Role assigned:', body.role);
+    } else {
+      console.log('Role already exists for:', userId);
     }
 
     console.log(`User created successfully: ${body.email} with role ${body.role}`);
