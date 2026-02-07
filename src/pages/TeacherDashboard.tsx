@@ -4,14 +4,16 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { BookOpen, Users, Loader2, Save, AlertCircle } from 'lucide-react';
+import { BookOpen, Users, Loader2, Save, AlertCircle, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getGradeFromMarks } from '@/lib/gpa-calculator';
+import { GradeMapping } from '@/lib/supabase-types';
+import { SubjectAnalytics } from '@/components/teacher/SubjectAnalytics';
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
@@ -20,8 +22,9 @@ export default function TeacherDashboard() {
   const [selectedAssignment, setSelectedAssignment] = useState<string>('');
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [grades, setGrades] = useState<Record<string, number>>({});
-  const [gradeMappings, setGradeMappings] = useState<any[]>([]);
+  const [gradeMappings, setGradeMappings] = useState<GradeMapping[]>([]);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('grades');
 
   useEffect(() => {
     if (user) {
@@ -242,75 +245,101 @@ export default function TeacherDashboard() {
           </CardContent>
         </Card>
 
-        {/* Grade Entry */}
+        {/* Tabs for Grades and Analytics */}
         {selectedAssignment && (
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle>Enter Grades</CardTitle>
-                  <CardDescription>
-                    {assignments.find(a => a.id === selectedAssignment)?.subjects?.name}
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  {assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked && (
-                    <Badge variant="secondary">Semester Locked</Badge>
-                  )}
-                  <Button 
-                    onClick={saveGrades} 
-                    disabled={saving || assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked}
-                  >
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Save Grades
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Marks (0-100)</TableHead>
-                    <TableHead>Letter Grade</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {enrollments.map((enrollment) => (
-                    <TableRow key={enrollment.id}>
-                      <TableCell className="font-mono">{enrollment.profiles?.student_id}</TableCell>
-                      <TableCell>{enrollment.profiles?.full_name}</TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          className="w-24"
-                          value={grades[enrollment.id] || ''}
-                          onChange={(e) => handleGradeChange(enrollment.id, parseFloat(e.target.value))}
-                          disabled={assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {grades[enrollment.id] !== undefined ? getLetterGrade(grades[enrollment.id]) : '-'}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {enrollments.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                        No students enrolled in this subject
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList>
+              <TabsTrigger value="grades" className="flex items-center gap-2">
+                <Save className="h-4 w-4" />
+                Enter Grades
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Analytics
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Grade Entry Tab */}
+            <TabsContent value="grades">
+              <Card>
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle>Enter Grades</CardTitle>
+                      <CardDescription>
+                        {assignments.find(a => a.id === selectedAssignment)?.subjects?.name}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked && (
+                        <Badge variant="secondary">Semester Locked</Badge>
+                      )}
+                      <Button 
+                        onClick={saveGrades} 
+                        disabled={saving || assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked}
+                      >
+                        {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                        Save Grades
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student ID</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Marks (0-100)</TableHead>
+                        <TableHead>Letter Grade</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {enrollments.map((enrollment) => (
+                        <TableRow key={enrollment.id}>
+                          <TableCell className="font-mono">{enrollment.profiles?.student_id}</TableCell>
+                          <TableCell>{enrollment.profiles?.full_name}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="100"
+                              className="w-24"
+                              value={grades[enrollment.id] || ''}
+                              onChange={(e) => handleGradeChange(enrollment.id, parseFloat(e.target.value))}
+                              disabled={assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {grades[enrollment.id] !== undefined ? getLetterGrade(grades[enrollment.id]) : '-'}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {enrollments.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                            No students enrolled in this subject
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Analytics Tab */}
+            <TabsContent value="analytics">
+              <SubjectAnalytics
+                enrollments={enrollments}
+                grades={grades}
+                gradeMappings={gradeMappings}
+                subjectName={assignments.find(a => a.id === selectedAssignment)?.subjects?.name || ''}
+              />
+            </TabsContent>
+          </Tabs>
         )}
       </div>
     </DashboardLayout>

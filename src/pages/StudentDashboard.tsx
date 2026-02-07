@@ -21,6 +21,7 @@ import {
   calculateEarnedCredits, getGradeFromMarks
 } from '@/lib/gpa-calculator';
 import { SubjectGrade, SemesterGPA, GradeMapping } from '@/lib/supabase-types';
+import { GPAInsights } from '@/components/student/GPAInsights';
 
 export default function StudentDashboard() {
   const { user, profile } = useAuth();
@@ -277,8 +278,9 @@ export default function StudentDashboard() {
 
         {/* Main Content */}
         <Tabs defaultValue="transcript" className="space-y-4">
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="transcript">Transcript</TabsTrigger>
+            <TabsTrigger value="insights">GPA Insights</TabsTrigger>
             <TabsTrigger value="simulator">GPA Simulator</TabsTrigger>
             <TabsTrigger value="feedback">Submit Feedback</TabsTrigger>
           </TabsList>
@@ -343,6 +345,16 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* GPA Insights Tab */}
+          <TabsContent value="insights">
+            <GPAInsights 
+              semesterData={semesterData}
+              cgpa={cgpa}
+              totalCredits={totalCredits}
+              earnedCredits={earnedCredits}
+            />
           </TabsContent>
 
           {/* GPA Simulator Tab */}
