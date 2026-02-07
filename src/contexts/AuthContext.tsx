@@ -12,6 +12,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string, role: AppRole, studentId?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  checkAdminExists: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -92,6 +93,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Check if any admin exists (for bootstrap logic)
+  const checkAdminExists = async (): Promise<boolean> => {
+    try {
+      const { count, error } = await supabase
+        .from('user_roles')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'admin');
+      
+      if (error) {
+        console.error('Error checking admin existence:', error);
+        return true; // Assume admin exists on error (safer)
+      }
+      
+      return (count ?? 0) > 0;
+    } catch (error) {
+      console.error('Error checking admin existence:', error);
+      return true;
+    }
+  };
+
   const signUp = async (
     email: string, 
     password: string, 
@@ -100,51 +121,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     studentId?: string
   ): Promise<{ error: Error | null }> => {
     try {
-      const redirectUrl = `${window.location.origin}/`;
-      
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            full_name: fullName,
-            role: role,
-            student_id: studentId
-          }
+      // Use the edge function for signup to bypass RLS issues
+      const response = await supabase.functions.invoke('signup-user', {
+        body: {
+          email,
+          password,
+          full_name: fullName,
+          role,
+          student_id: studentId
         }
       });
 
-      if (error) return { error };
+      if (response.error) {
+        return { error: new Error(response.error.message || 'Signup failed') };
+      }
 
-      if (data.user) {
-        // Create profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            email: email,
-            full_name: fullName,
-            student_id: studentId || null
-          });
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-          return { error: new Error('Failed to create profile') };
-        }
-
-        // Create user role
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .insert({
-            user_id: data.user.id,
-            role: role
-          });
-
-        if (roleError) {
-          console.error('Role creation error:', roleError);
-          return { error: new Error('Failed to assign role') };
-        }
+      if (response.data?.error) {
+        return { error: new Error(response.data.message || 'Signup failed') };
       }
 
       return { error: null };
@@ -182,7 +175,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       loading,
       signUp,
       signIn,
-      signOut
+      signOut,
+      checkAdminExists
     }}>
       {children}
     </AuthContext.Provider>
