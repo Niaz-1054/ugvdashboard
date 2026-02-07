@@ -12,9 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Users, BookOpen, Calendar, GraduationCap, Settings, 
-  Plus, Lock, Unlock, Loader2, AlertCircle, CheckCircle, UserPlus, Trash2
+  Plus, Lock, Unlock, Loader2, CheckCircle, UserPlus, Trash2, Star
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { AppRole } from '@/lib/supabase-types';
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
@@ -42,7 +43,15 @@ export default function AdminDashboard() {
   const [semesterForm, setSemesterForm] = useState({ name: '', academic_session_id: '', start_date: '', end_date: '' });
   const [teacherAssignmentForm, setTeacherAssignmentForm] = useState({ teacher_id: '', subject_id: '', semester_id: '' });
   const [enrollmentForm, setEnrollmentForm] = useState({ student_id: '', subject_id: '', semester_id: '' });
+  const [createUserForm, setCreateUserForm] = useState({ 
+    email: '', 
+    password: '', 
+    full_name: '', 
+    role: 'student' as AppRole, 
+    student_id: '' 
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -142,6 +151,37 @@ export default function AdminDashboard() {
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      const response = await supabase.functions.invoke('admin-create-user', {
+        body: createUserForm
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to create user');
+      }
+
+      if (response.data?.error) {
+        toast.error(response.data.message || 'Failed to create user');
+      } else {
+        toast.success(`User ${createUserForm.email} created successfully`);
+        setCreateUserForm({ email: '', password: '', full_name: '', role: 'student', student_id: '' });
+        setCreateUserDialogOpen(false);
+        fetchAllData();
+      }
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      toast.error(error.message || 'Failed to create user');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -290,6 +330,32 @@ export default function AdminDashboard() {
     }
   };
 
+  const setActiveSession = async (sessionId: string) => {
+    // First, set all sessions to inactive
+    const { error: deactivateError } = await supabase
+      .from('academic_sessions')
+      .update({ is_active: false })
+      .neq('id', sessionId);
+    
+    if (deactivateError) {
+      toast.error('Failed to update sessions');
+      return;
+    }
+
+    // Then, set the selected session to active
+    const { error } = await supabase
+      .from('academic_sessions')
+      .update({ is_active: true })
+      .eq('id', sessionId);
+    
+    if (error) {
+      toast.error('Failed to set active session');
+    } else {
+      toast.success('Active session updated');
+      fetchAllData();
+    }
+  };
+
   const resolveFeedback = async (feedbackId: string) => {
     const { error } = await supabase
       .from('feedback')
@@ -300,6 +366,22 @@ export default function AdminDashboard() {
       toast.error('Failed to resolve feedback');
     } else {
       toast.success('Feedback marked as resolved');
+      fetchAllData();
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    // Note: This only deletes from profiles table; auth user remains
+    // Full deletion would require service role key via edge function
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', userId);
+    
+    if (error) {
+      toast.error('Failed to delete user: ' + error.message);
+    } else {
+      toast.success('User removed from system');
       fetchAllData();
     }
   };
@@ -382,16 +464,149 @@ export default function AdminDashboard() {
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="subjects" className="space-y-4">
+        <Tabs defaultValue="users" className="space-y-4">
           <TabsList className="flex-wrap">
+            <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
+            <TabsTrigger value="sessions">Sessions</TabsTrigger>
             <TabsTrigger value="semesters">Semesters</TabsTrigger>
             <TabsTrigger value="teachers">Teacher Assignments</TabsTrigger>
             <TabsTrigger value="enrollments">Student Enrollments</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="grades">Grade Mapping</TabsTrigger>
             <TabsTrigger value="feedback">Feedback</TabsTrigger>
           </TabsList>
+
+          {/* Users Tab */}
+          <TabsContent value="users" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold">User Management</h3>
+                <p className="text-sm text-muted-foreground">Create and manage students, teachers, and admins</p>
+              </div>
+              <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Create User
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New User</DialogTitle>
+                    <DialogDescription>Create a new user account with assigned role</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleCreateUser} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Full Name</Label>
+                      <Input 
+                        placeholder="John Doe" 
+                        value={createUserForm.full_name}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, full_name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input 
+                        type="email"
+                        placeholder="user@university.edu" 
+                        value={createUserForm.email}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Password</Label>
+                      <Input 
+                        type="password"
+                        placeholder="Min 6 characters" 
+                        value={createUserForm.password}
+                        onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })}
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Role</Label>
+                      <Select 
+                        value={createUserForm.role}
+                        onValueChange={(v: AppRole) => setCreateUserForm({ ...createUserForm, role: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="student">Student</SelectItem>
+                          <SelectItem value="teacher">Teacher</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {createUserForm.role === 'student' && (
+                      <div className="space-y-2">
+                        <Label>Student ID</Label>
+                        <Input 
+                          placeholder="e.g., 2024001234" 
+                          value={createUserForm.student_id}
+                          onChange={(e) => setCreateUserForm({ ...createUserForm, student_id: e.target.value })}
+                          required
+                        />
+                      </div>
+                    )}
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                      {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Create User
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+            
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Student ID</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.full_name}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">
+                          {(user as any).user_roles?.[0]?.role || 'No role'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono">{user.student_id || '-'}</TableCell>
+                      <TableCell>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteUser(user.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {users.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No users registered yet
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
 
           {/* Subjects Tab */}
           <TabsContent value="subjects" className="space-y-4">
@@ -477,125 +692,184 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
+          {/* Sessions Tab */}
+          <TabsContent value="sessions" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold">Academic Sessions</h3>
+                <p className="text-sm text-muted-foreground">Manage academic years and set the active session</p>
+              </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Session
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add Academic Session</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleAddSession} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Session Name</Label>
+                      <Input 
+                        placeholder="2024-2025" 
+                        value={sessionForm.name}
+                        onChange={(e) => setSessionForm({ ...sessionForm, name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Start Date</Label>
+                        <Input 
+                          type="date" 
+                          value={sessionForm.start_date}
+                          onChange={(e) => setSessionForm({ ...sessionForm, start_date: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>End Date</Label>
+                        <Input 
+                          type="date" 
+                          value={sessionForm.end_date}
+                          onChange={(e) => setSessionForm({ ...sessionForm, end_date: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                      Add Session
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+            
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Session Name</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sessions.map((session) => (
+                    <TableRow key={session.id}>
+                      <TableCell className="font-medium">{session.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(session.start_date).toLocaleDateString()} - {new Date(session.end_date).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {session.is_active ? (
+                          <Badge className="bg-primary">
+                            <Star className="h-3 w-3 mr-1" />
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Inactive</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {!session.is_active && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setActiveSession(session.id)}
+                          >
+                            <Star className="h-4 w-4 mr-1" />
+                            Set Active
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {sessions.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                        No academic sessions yet. Add your first session!
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+
           {/* Semesters Tab */}
           <TabsContent value="semesters" className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Academic Sessions & Semesters</h3>
-              <div className="flex gap-2">
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Session
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add Academic Session</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleAddSession} className="space-y-4">
+              <h3 className="text-lg font-semibold">Semesters</h3>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Semester
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add Semester</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleAddSemester} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Academic Session</Label>
+                      <Select 
+                        value={semesterForm.academic_session_id}
+                        onValueChange={(v) => setSemesterForm({ ...semesterForm, academic_session_id: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select session" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sessions.map(session => (
+                            <SelectItem key={session.id} value={session.id}>
+                              {session.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Semester Name</Label>
+                      <Input 
+                        placeholder="Fall 2024" 
+                        value={semesterForm.name}
+                        onChange={(e) => setSemesterForm({ ...semesterForm, name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Session Name</Label>
+                        <Label>Start Date</Label>
                         <Input 
-                          placeholder="2024-2025" 
-                          value={sessionForm.name}
-                          onChange={(e) => setSessionForm({ ...sessionForm, name: e.target.value })}
+                          type="date" 
+                          value={semesterForm.start_date}
+                          onChange={(e) => setSemesterForm({ ...semesterForm, start_date: e.target.value })}
                           required
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Start Date</Label>
-                          <Input 
-                            type="date" 
-                            value={sessionForm.start_date}
-                            onChange={(e) => setSessionForm({ ...sessionForm, start_date: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>End Date</Label>
-                          <Input 
-                            type="date" 
-                            value={sessionForm.end_date}
-                            onChange={(e) => setSessionForm({ ...sessionForm, end_date: e.target.value })}
-                            required
-                          />
-                        </div>
+                      <div className="space-y-2">
+                        <Label>End Date</Label>
+                        <Input 
+                          type="date" 
+                          value={semesterForm.end_date}
+                          onChange={(e) => setSemesterForm({ ...semesterForm, end_date: e.target.value })}
+                          required
+                        />
                       </div>
-                      <Button type="submit" className="w-full" disabled={isSubmitting}>
-                        Add Session
-                      </Button>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-                
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
                       Add Semester
                     </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add Semester</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleAddSemester} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Academic Session</Label>
-                        <Select 
-                          value={semesterForm.academic_session_id}
-                          onValueChange={(v) => setSemesterForm({ ...semesterForm, academic_session_id: v })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select session" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {sessions.map(session => (
-                              <SelectItem key={session.id} value={session.id}>
-                                {session.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Semester Name</Label>
-                        <Input 
-                          placeholder="Fall 2024" 
-                          value={semesterForm.name}
-                          onChange={(e) => setSemesterForm({ ...semesterForm, name: e.target.value })}
-                          required
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Start Date</Label>
-                          <Input 
-                            type="date" 
-                            value={semesterForm.start_date}
-                            onChange={(e) => setSemesterForm({ ...semesterForm, start_date: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>End Date</Label>
-                          <Input 
-                            type="date" 
-                            value={semesterForm.end_date}
-                            onChange={(e) => setSemesterForm({ ...semesterForm, end_date: e.target.value })}
-                            required
-                          />
-                        </div>
-                      </div>
-                      <Button type="submit" className="w-full" disabled={isSubmitting}>
-                        Add Semester
-                      </Button>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
             
             <Card>
@@ -931,44 +1205,6 @@ export default function AdminDashboard() {
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                         No student enrollments yet. Enroll students in subjects above!
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
-
-          {/* Users Tab */}
-          <TabsContent value="users" className="space-y-4">
-            <h3 className="text-lg font-semibold">Registered Users</h3>
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Student ID</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.full_name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {(user as any).user_roles?.[0]?.role || 'No role'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{user.student_id || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                  {users.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                        No users registered yet
                       </TableCell>
                     </TableRow>
                   )}
