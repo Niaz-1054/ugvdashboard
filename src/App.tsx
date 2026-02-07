@@ -17,6 +17,7 @@ const queryClient = new QueryClient();
 const HomeRedirect = () => {
   const { user, role, loading } = useAuth();
 
+  // Wait for auth to fully resolve
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -25,10 +26,21 @@ const HomeRedirect = () => {
     );
   }
 
+  // No user after loading complete = go to auth
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
 
+  // User exists but role not loaded yet = keep waiting
+  if (!role) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Role is loaded, redirect appropriately
   switch (role) {
     case 'admin':
       return <Navigate to="/admin" replace />;
