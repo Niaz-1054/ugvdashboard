@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Users, BookOpen, Calendar, GraduationCap, Settings, 
-  Plus, Lock, Unlock, Loader2, AlertCircle, CheckCircle
+  Plus, Lock, Unlock, Loader2, AlertCircle, CheckCircle, UserPlus, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,16 +26,22 @@ export default function AdminDashboard() {
   });
   
   const [users, setUsers] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [semesters, setSemesters] = useState<any[]>([]);
   const [gradeMappings, setGradeMappings] = useState<any[]>([]);
   const [feedback, setFeedback] = useState<any[]>([]);
+  const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
   
   // Form states
   const [subjectForm, setSubjectForm] = useState({ code: '', name: '', credits: 3 });
   const [sessionForm, setSessionForm] = useState({ name: '', start_date: '', end_date: '' });
   const [semesterForm, setSemesterForm] = useState({ name: '', academic_session_id: '', start_date: '', end_date: '' });
+  const [teacherAssignmentForm, setTeacherAssignmentForm] = useState({ teacher_id: '', subject_id: '', semester_id: '' });
+  const [enrollmentForm, setEnrollmentForm] = useState({ student_id: '', subject_id: '', semester_id: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -50,7 +56,12 @@ export default function AdminDashboard() {
         .from('profiles')
         .select('*, user_roles(role)');
       
-      if (profiles) setUsers(profiles);
+      if (profiles) {
+        setUsers(profiles);
+        // Filter teachers and students
+        setTeachers(profiles.filter((p: any) => p.user_roles?.some((r: any) => r.role === 'teacher')));
+        setStudents(profiles.filter((p: any) => p.user_roles?.some((r: any) => r.role === 'student')));
+      }
 
       // Count students and teachers
       const { count: studentCount } = await supabase
@@ -102,6 +113,22 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: false });
       
       if (feedbackData) setFeedback(feedbackData);
+
+      // Fetch teacher assignments
+      const { data: assignmentsData } = await supabase
+        .from('teacher_assignments')
+        .select('*, profiles(full_name, email), subjects(code, name), semesters(name, academic_sessions(name))')
+        .order('created_at', { ascending: false });
+      
+      if (assignmentsData) setTeacherAssignments(assignmentsData);
+
+      // Fetch enrollments
+      const { data: enrollmentsData } = await supabase
+        .from('enrollments')
+        .select('*, profiles(full_name, student_id, email), subjects(code, name), semesters(name, academic_sessions(name))')
+        .order('created_at', { ascending: false });
+      
+      if (enrollmentsData) setEnrollments(enrollmentsData);
 
       setStats({
         totalStudents: studentCount || 0,
@@ -175,6 +202,80 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAssignTeacher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    const { error } = await supabase
+      .from('teacher_assignments')
+      .insert(teacherAssignmentForm);
+    
+    setIsSubmitting(false);
+    
+    if (error) {
+      if (error.message.includes('duplicate')) {
+        toast.error('This teacher is already assigned to this subject for this semester');
+      } else {
+        toast.error('Failed to assign teacher: ' + error.message);
+      }
+    } else {
+      toast.success('Teacher assigned successfully');
+      setTeacherAssignmentForm({ teacher_id: '', subject_id: '', semester_id: '' });
+      fetchAllData();
+    }
+  };
+
+  const handleEnrollStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    const { error } = await supabase
+      .from('enrollments')
+      .insert(enrollmentForm);
+    
+    setIsSubmitting(false);
+    
+    if (error) {
+      if (error.message.includes('duplicate')) {
+        toast.error('This student is already enrolled in this subject for this semester');
+      } else {
+        toast.error('Failed to enroll student: ' + error.message);
+      }
+    } else {
+      toast.success('Student enrolled successfully');
+      setEnrollmentForm({ student_id: '', subject_id: '', semester_id: '' });
+      fetchAllData();
+    }
+  };
+
+  const handleRemoveTeacherAssignment = async (assignmentId: string) => {
+    const { error } = await supabase
+      .from('teacher_assignments')
+      .delete()
+      .eq('id', assignmentId);
+    
+    if (error) {
+      toast.error('Failed to remove assignment');
+    } else {
+      toast.success('Assignment removed');
+      fetchAllData();
+    }
+  };
+
+  const handleRemoveEnrollment = async (enrollmentId: string) => {
+    const { error } = await supabase
+      .from('enrollments')
+      .delete()
+      .eq('id', enrollmentId);
+    
+    if (error) {
+      toast.error('Failed to remove enrollment');
+    } else {
+      toast.success('Enrollment removed');
+      fetchAllData();
+    }
+  };
+
   const toggleSemesterLock = async (semesterId: string, currentLock: boolean) => {
     const { error } = await supabase
       .from('semesters')
@@ -226,8 +327,8 @@ export default function AdminDashboard() {
           <Card className="card-elevated">
             <CardContent className="pt-6">
               <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-blue-100">
-                  <Users className="h-6 w-6 text-blue-600" />
+                <div className="p-3 rounded-xl bg-accent">
+                  <Users className="h-6 w-6 text-primary" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.totalStudents}</p>
@@ -240,8 +341,8 @@ export default function AdminDashboard() {
           <Card className="card-elevated">
             <CardContent className="pt-6">
               <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-purple-100">
-                  <GraduationCap className="h-6 w-6 text-purple-600" />
+                <div className="p-3 rounded-xl bg-accent">
+                  <GraduationCap className="h-6 w-6 text-primary" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.totalTeachers}</p>
@@ -254,8 +355,8 @@ export default function AdminDashboard() {
           <Card className="card-elevated">
             <CardContent className="pt-6">
               <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-green-100">
-                  <BookOpen className="h-6 w-6 text-green-600" />
+                <div className="p-3 rounded-xl bg-accent">
+                  <BookOpen className="h-6 w-6 text-primary" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.totalSubjects}</p>
@@ -268,8 +369,8 @@ export default function AdminDashboard() {
           <Card className="card-elevated">
             <CardContent className="pt-6">
               <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-amber-100">
-                  <Calendar className="h-6 w-6 text-amber-600" />
+                <div className="p-3 rounded-xl bg-accent">
+                  <Calendar className="h-6 w-6 text-primary" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.activeSemesters}</p>
@@ -282,9 +383,11 @@ export default function AdminDashboard() {
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="subjects" className="space-y-4">
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="semesters">Semesters</TabsTrigger>
+            <TabsTrigger value="teachers">Teacher Assignments</TabsTrigger>
+            <TabsTrigger value="enrollments">Student Enrollments</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="grades">Grade Mapping</TabsTrigger>
             <TabsTrigger value="feedback">Feedback</TabsTrigger>
@@ -538,6 +641,296 @@ export default function AdminDashboard() {
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                         No semesters yet. Create an academic session first!
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+
+          {/* Teacher Assignments Tab */}
+          <TabsContent value="teachers" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold">Teacher Assignments</h3>
+                <p className="text-sm text-muted-foreground">Assign teachers to subjects for specific semesters</p>
+              </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Assign Teacher
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Assign Teacher to Subject</DialogTitle>
+                    <DialogDescription>Select a teacher, subject, and semester</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleAssignTeacher} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Teacher</Label>
+                      <Select 
+                        value={teacherAssignmentForm.teacher_id}
+                        onValueChange={(v) => setTeacherAssignmentForm({ ...teacherAssignmentForm, teacher_id: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select teacher" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {teachers.map(teacher => (
+                            <SelectItem key={teacher.id} value={teacher.id}>
+                              {teacher.full_name} ({teacher.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {teachers.length === 0 && (
+                        <p className="text-xs text-muted-foreground">No teachers registered yet</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Subject</Label>
+                      <Select 
+                        value={teacherAssignmentForm.subject_id}
+                        onValueChange={(v) => setTeacherAssignmentForm({ ...teacherAssignmentForm, subject_id: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select subject" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subjects.map(subject => (
+                            <SelectItem key={subject.id} value={subject.id}>
+                              {subject.code} - {subject.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Semester</Label>
+                      <Select 
+                        value={teacherAssignmentForm.semester_id}
+                        onValueChange={(v) => setTeacherAssignmentForm({ ...teacherAssignmentForm, semester_id: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select semester" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {semesters.map(semester => (
+                            <SelectItem key={semester.id} value={semester.id}>
+                              {semester.name} ({(semester as any).academic_sessions?.name})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button 
+                      type="submit" 
+                      className="w-full" 
+                      disabled={isSubmitting || !teacherAssignmentForm.teacher_id || !teacherAssignmentForm.subject_id || !teacherAssignmentForm.semester_id}
+                    >
+                      {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Assign Teacher
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+            
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Teacher</TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead>Semester</TableHead>
+                    <TableHead>Session</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {teacherAssignments.map((assignment) => (
+                    <TableRow key={assignment.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{assignment.profiles?.full_name}</p>
+                          <p className="text-xs text-muted-foreground">{assignment.profiles?.email}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{assignment.subjects?.code}</Badge>
+                        <span className="ml-2">{assignment.subjects?.name}</span>
+                      </TableCell>
+                      <TableCell>{assignment.semesters?.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {(assignment.semesters as any)?.academic_sessions?.name}
+                      </TableCell>
+                      <TableCell>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveTeacherAssignment(assignment.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {teacherAssignments.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No teacher assignments yet. Assign teachers to subjects above!
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+
+          {/* Student Enrollments Tab */}
+          <TabsContent value="enrollments" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold">Student Enrollments</h3>
+                <p className="text-sm text-muted-foreground">Enroll students in subjects for specific semesters</p>
+              </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Enroll Student
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Enroll Student in Subject</DialogTitle>
+                    <DialogDescription>Select a student, subject, and semester</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleEnrollStudent} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Student</Label>
+                      <Select 
+                        value={enrollmentForm.student_id}
+                        onValueChange={(v) => setEnrollmentForm({ ...enrollmentForm, student_id: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select student" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {students.map(student => (
+                            <SelectItem key={student.id} value={student.id}>
+                              {student.full_name} ({student.student_id || student.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {students.length === 0 && (
+                        <p className="text-xs text-muted-foreground">No students registered yet</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Subject</Label>
+                      <Select 
+                        value={enrollmentForm.subject_id}
+                        onValueChange={(v) => setEnrollmentForm({ ...enrollmentForm, subject_id: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select subject" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subjects.map(subject => (
+                            <SelectItem key={subject.id} value={subject.id}>
+                              {subject.code} - {subject.name} ({subject.credits} credits)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Semester</Label>
+                      <Select 
+                        value={enrollmentForm.semester_id}
+                        onValueChange={(v) => setEnrollmentForm({ ...enrollmentForm, semester_id: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select semester" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {semesters.filter(s => !s.is_locked).map(semester => (
+                            <SelectItem key={semester.id} value={semester.id}>
+                              {semester.name} ({(semester as any).academic_sessions?.name})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Only active (unlocked) semesters are shown</p>
+                    </div>
+                    <Button 
+                      type="submit" 
+                      className="w-full" 
+                      disabled={isSubmitting || !enrollmentForm.student_id || !enrollmentForm.subject_id || !enrollmentForm.semester_id}
+                    >
+                      {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Enroll Student
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+            
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Student ID</TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead>Semester</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {enrollments.map((enrollment) => (
+                    <TableRow key={enrollment.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{enrollment.profiles?.full_name}</p>
+                          <p className="text-xs text-muted-foreground">{enrollment.profiles?.email}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono">{enrollment.profiles?.student_id || '-'}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{enrollment.subjects?.code}</Badge>
+                        <span className="ml-2">{enrollment.subjects?.name}</span>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p>{enrollment.semesters?.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(enrollment.semesters as any)?.academic_sessions?.name}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveEnrollment(enrollment.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {enrollments.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No student enrollments yet. Enroll students in subjects above!
                       </TableCell>
                     </TableRow>
                   )}
