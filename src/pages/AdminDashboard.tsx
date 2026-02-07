@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Users, BookOpen, Calendar, GraduationCap, Settings, 
-  Plus, Lock, Unlock, Loader2, CheckCircle, UserPlus, Trash2, Star
+  Plus, Lock, Unlock, Loader2, CheckCircle, UserPlus, Trash2, Star, Database
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole } from '@/lib/supabase-types';
@@ -52,6 +52,7 @@ export default function AdminDashboard() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -390,6 +391,40 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSeedData = async () => {
+    setIsSeeding(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      
+      const response = await supabase.functions.invoke('seed-academic-data', {
+        headers: {
+          Authorization: `Bearer ${session?.session?.access_token}`
+        }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to seed data');
+      }
+
+      if (response.data?.error) {
+        toast.error(response.data.message || 'Failed to seed data');
+      } else {
+        const result = response.data.result;
+        toast.success(
+          `Seeding complete! Created: ${result.enrollments_created} enrollments, ` +
+          `${result.teacher_assignments_created} assignments, ${result.grades_created} grades, ` +
+          `${result.feedback_created} feedback entries`
+        );
+        fetchAllData();
+      }
+    } catch (error: any) {
+      console.error('Seeding error:', error);
+      toast.error(error.message || 'Failed to seed data');
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -403,9 +438,20 @@ export default function AdminDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Admin Dashboard</h2>
-          <p className="text-muted-foreground">Manage the academic system</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Admin Dashboard</h2>
+            <p className="text-muted-foreground">Manage the academic system</p>
+          </div>
+          <Button 
+            onClick={handleSeedData} 
+            disabled={isSeeding}
+            variant="outline"
+            className="gap-2"
+          >
+            {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+            {isSeeding ? 'Seeding...' : 'Seed Demo Data'}
+          </Button>
         </div>
 
         {/* Stats */}

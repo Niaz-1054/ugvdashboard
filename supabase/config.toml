@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.signup-user]
 verify_jwt = false
+
+[functions.seed-academic-data]
+verify_jwt = false
