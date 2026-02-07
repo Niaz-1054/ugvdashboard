@@ -410,11 +410,18 @@ export default function AdminDashboard() {
         toast.error(response.data.message || 'Failed to seed data');
       } else {
         const result = response.data.result;
-        toast.success(
-          `Seeding complete! Created: ${result.enrollments_created} enrollments, ` +
-          `${result.teacher_assignments_created} assignments, ${result.grades_created} grades, ` +
-          `${result.feedback_created} feedback entries`
-        );
+        const totalCreated = result.enrollments_created + result.teacher_assignments_created + 
+                            result.grades_created + result.feedback_created;
+        
+        if (totalCreated === 0) {
+          toast.info('Data already seeded! All enrollments, grades, and assignments are in place.');
+        } else {
+          toast.success(
+            `Seeding complete! Created: ${result.enrollments_created} enrollments, ` +
+            `${result.teacher_assignments_created} assignments, ${result.grades_created} grades, ` +
+            `${result.feedback_created} feedback entries`
+          );
+        }
         fetchAllData();
       }
     } catch (error: any) {
