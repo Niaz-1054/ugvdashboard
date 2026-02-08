@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole } from '@/lib/supabase-types';
+import { StudentEnrollmentPanel } from '@/components/admin/StudentEnrollmentPanel';
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
@@ -1125,150 +1126,20 @@ export default function AdminDashboard() {
 
           {/* Student Enrollments Tab */}
           <TabsContent value="enrollments" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-semibold">Student Enrollments</h3>
-                <p className="text-sm text-muted-foreground">Enroll students in subjects for specific semesters</p>
-              </div>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button>
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Enroll Student
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Enroll Student in Subject</DialogTitle>
-                    <DialogDescription>Select a student, subject, and semester</DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleEnrollStudent} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Student</Label>
-                      <Select 
-                        value={enrollmentForm.student_id}
-                        onValueChange={(v) => setEnrollmentForm({ ...enrollmentForm, student_id: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select student" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {students.map(student => (
-                            <SelectItem key={student.id} value={student.id}>
-                              {student.full_name} ({student.student_id || student.email})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {students.length === 0 && (
-                        <p className="text-xs text-muted-foreground">No students registered yet</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Subject</Label>
-                      <Select 
-                        value={enrollmentForm.subject_id}
-                        onValueChange={(v) => setEnrollmentForm({ ...enrollmentForm, subject_id: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select subject" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {subjects.map(subject => (
-                            <SelectItem key={subject.id} value={subject.id}>
-                              {subject.code} - {subject.name} ({subject.credits} credits)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Semester</Label>
-                      <Select 
-                        value={enrollmentForm.semester_id}
-                        onValueChange={(v) => setEnrollmentForm({ ...enrollmentForm, semester_id: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select semester" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {semesters.filter(s => !s.is_locked).map(semester => (
-                            <SelectItem key={semester.id} value={semester.id}>
-                              {semester.name} ({(semester as any).academic_sessions?.name})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">Only active (unlocked) semesters are shown</p>
-                    </div>
-                    <Button 
-                      type="submit" 
-                      className="w-full" 
-                      disabled={isSubmitting || !enrollmentForm.student_id || !enrollmentForm.subject_id || !enrollmentForm.semester_id}
-                    >
-                      {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Enroll Student
-                    </Button>
-                  </form>
-                </DialogContent>
-              </Dialog>
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold">Student Enrollments</h3>
+              <p className="text-sm text-muted-foreground">
+                Select a student and semester to manage subject enrollments
+              </p>
             </div>
             
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Student ID</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Semester</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {enrollments.map((enrollment) => (
-                    <TableRow key={enrollment.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{enrollment.profiles?.full_name}</p>
-                          <p className="text-xs text-muted-foreground">{enrollment.profiles?.email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono">{enrollment.profiles?.student_id || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{enrollment.subjects?.code}</Badge>
-                        <span className="ml-2">{enrollment.subjects?.name}</span>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p>{enrollment.semesters?.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(enrollment.semesters as any)?.academic_sessions?.name}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => handleRemoveEnrollment(enrollment.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {enrollments.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No student enrollments yet. Enroll students in subjects above!
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Card>
+            <StudentEnrollmentPanel
+              students={students}
+              subjects={subjects}
+              semesters={semesters}
+              enrollments={enrollments}
+              onEnrollmentChange={fetchAllData}
+            />
           </TabsContent>
 
           {/* Grade Mapping Tab */}
