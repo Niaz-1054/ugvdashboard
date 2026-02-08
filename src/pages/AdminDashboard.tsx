@@ -407,19 +407,20 @@ export default function AdminDashboard() {
       }
 
       if (response.data?.error) {
-        toast.error(response.data.message || 'Failed to seed data');
+        toast.error(response.data.error || 'Failed to seed data');
       } else {
         const result = response.data.result;
-        const totalCreated = result.enrollments_created + result.teacher_assignments_created + 
-                            result.grades_created + result.feedback_created;
+        const totalCreated = (result.sessions_created || 0) + (result.semesters_created || 0) + 
+                            (result.subjects_created || 0) + (result.enrollments_created || 0) + 
+                            (result.teacher_assignments_created || 0) + (result.grades_created || 0);
         
         if (totalCreated === 0) {
-          toast.info('Data already seeded! All enrollments, grades, and assignments are in place.');
+          toast.info('Data already seeded! All 8 semesters with enrollments and grades are in place.');
         } else {
           toast.success(
-            `Seeding complete! Created: ${result.enrollments_created} enrollments, ` +
-            `${result.teacher_assignments_created} assignments, ${result.grades_created} grades, ` +
-            `${result.feedback_created} feedback entries`
+            `Multi-semester seeding complete! Created: ${result.semesters_created || 0} semesters, ` +
+            `${result.subjects_created || 0} subjects, ${result.enrollments_created || 0} enrollments, ` +
+            `${result.grades_created || 0} grades across all 8 semesters`
           );
         }
         fetchAllData();
