@@ -7,9 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { GraduationCap, Loader2, AlertCircle, CheckCircle, ShieldCheck } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle, ShieldCheck } from 'lucide-react';
 import { AppRole } from '@/lib/supabase-types';
 import { z } from 'zod';
+import ugvLogo from '@/assets/ugv-logo.png';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -185,9 +186,11 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/20 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl ugv-gradient mb-4">
-            <GraduationCap className="h-8 w-8 text-white" />
-          </div>
+          <img 
+            src={ugvLogo} 
+            alt="University of Global Village Logo" 
+            className="h-20 w-auto mx-auto mb-4"
+          />
           <h1 className="text-2xl font-bold text-foreground">UGV Academic Portal</h1>
           <p className="text-muted-foreground mt-1">University of Global Village</p>
         </div>

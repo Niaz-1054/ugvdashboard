@@ -1,6 +1,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { LogOut, GraduationCap, User } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
+import ugvLogo from '@/assets/ugv-logo.png';
 
 export const Header = () => {
   const { profile, role, signOut } = useAuth();
@@ -18,9 +19,11 @@ export const Header = () => {
     <header className="sticky top-0 z-50 w-full border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl ugv-gradient">
-            <GraduationCap className="h-6 w-6 text-white" />
-          </div>
+          <img 
+            src={ugvLogo} 
+            alt="University of Global Village Logo" 
+            className="h-10 w-auto"
+          />
           <div>
             <h1 className="text-lg font-semibold text-foreground">UGV Portal</h1>
             <p className="text-xs text-muted-foreground">University of Global Village</p>
