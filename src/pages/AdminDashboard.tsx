@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { AppRole } from '@/lib/supabase-types';
 import { StudentEnrollmentPanel } from '@/components/admin/StudentEnrollmentPanel';
 import { TeacherAssignmentPanel } from '@/components/admin/TeacherAssignmentPanel';
+import { UserManagementPanel } from '@/components/admin/UserManagementPanel';
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
@@ -583,50 +584,10 @@ export default function AdminDashboard() {
               </Dialog>
             </div>
             
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Student ID</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.full_name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {(user as any).user_roles?.[0]?.role || 'No role'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono">{user.student_id || '-'}</TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => handleDeleteUser(user.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {users.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No users registered yet
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Card>
+            <UserManagementPanel 
+              users={users} 
+              onDeleteUser={handleDeleteUser} 
+            />
           </TabsContent>
 
           {/* Subjects Tab */}
