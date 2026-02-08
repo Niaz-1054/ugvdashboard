@@ -391,6 +391,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteSubject = async (subjectId: string) => {
+    const { error } = await supabase
+      .from('subjects')
+      .delete()
+      .eq('id', subjectId);
+    
+    if (error) {
+      toast.error('Failed to delete subject: ' + error.message);
+    } else {
+      toast.success('Subject deleted');
+      fetchAllData();
+    }
+  };
+
 
   if (loading) {
     return (
@@ -676,6 +690,7 @@ export default function AdminDashboard() {
                     <TableHead>Code</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Credits</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -684,11 +699,21 @@ export default function AdminDashboard() {
                       <TableCell className="font-mono">{subject.code}</TableCell>
                       <TableCell>{subject.name}</TableCell>
                       <TableCell>{subject.credits}</TableCell>
+                      <TableCell>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteSubject(subject.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {subjects.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                         No subjects yet. Add your first subject!
                       </TableCell>
                     </TableRow>
