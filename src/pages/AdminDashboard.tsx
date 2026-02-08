@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Users, BookOpen, Calendar, GraduationCap, Settings, 
-  Plus, Lock, Unlock, Loader2, CheckCircle, UserPlus, Trash2, Star, Database
+  Plus, Lock, Unlock, Loader2, CheckCircle, UserPlus, Trash2, Star, Database, UsersRound
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole } from '@/lib/supabase-types';
@@ -54,6 +54,7 @@ export default function AdminDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isSeedingMore, setIsSeedingMore] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -434,6 +435,38 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSeedMoreStudents = async () => {
+    setIsSeedingMore(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      
+      const response = await supabase.functions.invoke('seed-more-students', {
+        headers: {
+          Authorization: `Bearer ${session?.session?.access_token}`
+        }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to add students');
+      }
+
+      if (response.data?.error) {
+        toast.error(response.data.error || 'Failed to add students');
+      } else {
+        const details = response.data.details;
+        toast.success(
+          `Added ${details.students_created} new students with ${details.enrollments_created} enrollments and ${details.grades_created} grades!`
+        );
+        fetchAllData();
+      }
+    } catch (error: any) {
+      console.error('Add students error:', error);
+      toast.error(error.message || 'Failed to add students');
+    } finally {
+      setIsSeedingMore(false);
+    }
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -452,15 +485,26 @@ export default function AdminDashboard() {
             <h2 className="text-2xl font-bold text-foreground">Admin Dashboard</h2>
             <p className="text-muted-foreground">Manage the academic system</p>
           </div>
-          <Button 
-            onClick={handleSeedData} 
-            disabled={isSeeding}
-            variant="outline"
-            className="gap-2"
-          >
-            {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
-            {isSeeding ? 'Seeding...' : 'Seed Demo Data'}
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={handleSeedData} 
+              disabled={isSeeding || isSeedingMore}
+              variant="outline"
+              className="gap-2"
+            >
+              {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+              {isSeeding ? 'Seeding...' : 'Seed Demo Data'}
+            </Button>
+            <Button 
+              onClick={handleSeedMoreStudents} 
+              disabled={isSeeding || isSeedingMore}
+              variant="outline"
+              className="gap-2"
+            >
+              {isSeedingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <UsersRound className="h-4 w-4" />}
+              {isSeedingMore ? 'Adding...' : 'Add 25 Students'}
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
