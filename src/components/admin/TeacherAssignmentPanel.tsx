@@ -7,9 +7,17 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, X, BookOpen, GraduationCap, Search, Trash2 } from 'lucide-react';
+import { Loader2, Save, X, BookOpen, GraduationCap, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { sortSemestersChronologically } from '@/lib/semester-utils';
+
+// Helper to get ordinal suffix
+const getOrdinal = (n: number): string => {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
 
 interface Teacher {
   id: string;
@@ -59,11 +67,13 @@ export function TeacherAssignmentPanel({
   const [pendingChanges, setPendingChanges] = useState<Map<string, boolean>>(new Map());
   const [isSaving, setIsSaving] = useState(false);
 
-  // Get active semesters only
-  const activeSemesters = useMemo(() => 
-    semesters.filter(s => !s.is_locked), 
-    [semesters]
-  );
+  // Get active semesters only, sorted chronologically with ordinal labels
+  const activeSemesters = useMemo(() => {
+    const allSorted = sortSemestersChronologically(semesters);
+    return allSorted
+      .map((s, index) => ({ ...s, ordinalLabel: getOrdinal(index + 1) }))
+      .filter(s => !s.is_locked);
+  }, [semesters]);
 
   // Filter teachers by search query
   const filteredTeachers = useMemo(() => {
@@ -253,9 +263,9 @@ export function TeacherAssignmentPanel({
                 {activeSemesters.map(semester => (
                   <SelectItem key={semester.id} value={semester.id}>
                     <div className="flex flex-col items-start">
-                      <span>{semester.name}</span>
+                      <span>{semester.ordinalLabel} Semester</span>
                       <span className="text-xs text-muted-foreground">
-                        {(semester as any).academic_sessions?.name}
+                        {semester.name} • {(semester as any).academic_sessions?.name}
                       </span>
                     </div>
                   </SelectItem>
