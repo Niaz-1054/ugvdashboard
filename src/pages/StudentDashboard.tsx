@@ -23,6 +23,7 @@ import {
 } from '@/lib/gpa-calculator';
 import { SubjectGrade, SemesterGPA, GradeMapping } from '@/lib/supabase-types';
 import { GPAInsights } from '@/components/student/GPAInsights';
+import { sortSemestersChronologically } from '@/lib/semester-utils';
 
 export default function StudentDashboard() {
   const { user, profile } = useAuth();
@@ -110,9 +111,12 @@ export default function StudentDashboard() {
     }
   };
 
-  // Calculate semester-wise data
+  // Calculate semester-wise data with chronological sorting
   const getSemesterData = (): SemesterGPA[] => {
-    return semesters.map((semester: any) => {
+    // Sort semesters chronologically (Summer YYYY, Winter YYYY, ...)
+    const sortedSemesters = sortSemestersChronologically(semesters);
+    
+    return sortedSemesters.map((semester: any) => {
       const semesterEnrollments = enrollments.filter(
         e => e.semester_id === semester.id
       );
