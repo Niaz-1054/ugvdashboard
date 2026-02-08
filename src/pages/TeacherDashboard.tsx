@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,11 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { BookOpen, Users, Loader2, Save, AlertCircle, BarChart3, CheckCircle2 } from 'lucide-react';
+import { BookOpen, Users, Loader2, Save, AlertCircle, BarChart3, CheckCircle2, CloudOff, Cloud } from 'lucide-react';
 import { toast } from 'sonner';
 import { getGradeFromMarks } from '@/lib/gpa-calculator';
 import { GradeMapping } from '@/lib/supabase-types';
 import { SubjectAnalytics } from '@/components/teacher/SubjectAnalytics';
+import { useGradeDrafts } from '@/hooks/useGradeDrafts';
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
@@ -21,11 +22,36 @@ export default function TeacherDashboard() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [selectedAssignment, setSelectedAssignment] = useState<string>('');
   const [enrollments, setEnrollments] = useState<any[]>([]);
-  const [grades, setGrades] = useState<Record<string, number>>({});
+  const [submittedGrades, setSubmittedGrades] = useState<Record<string, number>>({});
   const [gradeMappings, setGradeMappings] = useState<GradeMapping[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState('grades');
+
+  // Get current assignment details for draft scoping
+  const currentAssignment = useMemo(() => 
+    assignments.find(a => a.id === selectedAssignment),
+    [assignments, selectedAssignment]
+  );
+
+  // Draft management hook
+  const {
+    draftGrades,
+    setDraftGrade,
+    clearDrafts,
+    hasDrafts,
+    draftStatus,
+    getDraftCount,
+  } = useGradeDrafts({
+    teacherId: user?.id,
+    subjectId: currentAssignment?.subject_id,
+    semesterId: currentAssignment?.semester_id,
+  });
+
+  // Merge submitted and draft grades (drafts take precedence for display)
+  const grades = useMemo(() => {
+    return { ...submittedGrades, ...draftGrades };
+  }, [submittedGrades, draftGrades]);
 
   useEffect(() => {
     if (user) {
@@ -92,14 +118,14 @@ export default function TeacherDashboard() {
       if (enrollmentsData) {
         setEnrollments(enrollmentsData);
         
-        // Initialize grades state
+        // Initialize submitted grades state (from database)
         const initialGrades: Record<string, number> = {};
         enrollmentsData.forEach((enrollment: any) => {
           if (enrollment.grades?.[0]) {
             initialGrades[enrollment.id] = enrollment.grades[0].marks;
           }
         });
-        setGrades(initialGrades);
+        setSubmittedGrades(initialGrades);
       }
     } catch (error) {
       console.error('Error fetching enrollments:', error);
@@ -116,10 +142,8 @@ export default function TeacherDashboard() {
   const handleGradeChange = (enrollmentId: string, marks: number) => {
     // Clear success state when user starts editing
     if (saveSuccess) setSaveSuccess(false);
-    setGrades(prev => ({
-      ...prev,
-      [enrollmentId]: marks
-    }));
+    // Save to draft (auto-persisted to localStorage)
+    setDraftGrade(enrollmentId, marks);
   };
 
   const saveGrades = async () => {
@@ -133,7 +157,7 @@ export default function TeacherDashboard() {
     }
 
     try {
-      // Prepare all grade records for upsert
+      // Prepare all grade records for upsert (merged submitted + draft)
       const gradeRecords = enrollments
         .filter(enrollment => grades[enrollment.id] !== undefined && !isNaN(grades[enrollment.id]))
         .map(enrollment => {
@@ -171,6 +195,10 @@ export default function TeacherDashboard() {
       }
 
       console.log('Grades saved successfully:', data);
+      
+      // Clear drafts after successful save
+      clearDrafts();
+      
       setSaveSuccess(true);
       toast.success('Grades saved successfully');
       fetchEnrollments(selectedAssignment);
@@ -293,12 +321,34 @@ export default function TeacherDashboard() {
                         {assignments.find(a => a.id === selectedAssignment)?.subjects?.name}
                       </CardDescription>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
+                      {/* Draft status indicator */}
+                      {hasDrafts && !saveSuccess && (
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                          {draftStatus === 'saving' ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>Saving draft...</span>
+                            </>
+                          ) : draftStatus === 'saved' ? (
+                            <>
+                              <CloudOff className="h-3.5 w-3.5" />
+                              <span>Draft saved ({getDraftCount()} unsaved)</span>
+                            </>
+                          ) : (
+                            <>
+                              <CloudOff className="h-3.5 w-3.5" />
+                              <span>{getDraftCount()} unsaved changes</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      
                       {assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked && (
                         <Badge variant="secondary">Semester Locked</Badge>
                       )}
                       {saveSuccess && (
-                        <div className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium animate-in fade-in slide-in-from-right-2 duration-300">
+                        <div className="flex items-center gap-1.5 text-sm font-medium text-primary animate-in fade-in slide-in-from-right-2 duration-300">
                           <CheckCircle2 className="h-4 w-4" />
                           <span>Grades Saved</span>
                         </div>
@@ -319,40 +369,64 @@ export default function TeacherDashboard() {
                       <TableRow>
                         <TableHead>Student ID</TableHead>
                         <TableHead>Name</TableHead>
-                        <TableHead>Marks (0-100)</TableHead>
-                        <TableHead>Letter Grade</TableHead>
+                        <TableHead className="w-28">Student ID</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="w-32">Marks (0-100)</TableHead>
+                        <TableHead className="w-28">Letter Grade</TableHead>
+                        <TableHead className="w-20">Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {enrollments.map((enrollment) => (
-                        <TableRow key={enrollment.id}>
-                          <TableCell className="font-mono">
-                            {enrollment.profiles?.student_id ?? '—'}
-                          </TableCell>
-                          <TableCell>
-                            {enrollment.profiles?.full_name ?? '—'}
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              max="100"
-                              className="w-24"
-                              value={grades[enrollment.id] ?? ''}
-                              onChange={(e) => handleGradeChange(enrollment.id, parseFloat(e.target.value))}
-                              disabled={assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
-                              {grades[enrollment.id] !== undefined ? getLetterGrade(grades[enrollment.id]) : '—'}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {enrollments.map((enrollment) => {
+                        const isDraft = draftGrades[enrollment.id] !== undefined;
+                        const isSubmitted = submittedGrades[enrollment.id] !== undefined;
+                        const hasValue = grades[enrollment.id] !== undefined;
+                        
+                        return (
+                          <TableRow key={enrollment.id} className={isDraft ? 'bg-muted/30' : ''}>
+                            <TableCell className="font-mono">
+                              {enrollment.profiles?.student_id ?? '—'}
+                            </TableCell>
+                            <TableCell>
+                              {enrollment.profiles?.full_name ?? '—'}
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                className="w-24"
+                                value={grades[enrollment.id] ?? ''}
+                                onChange={(e) => handleGradeChange(enrollment.id, parseFloat(e.target.value))}
+                                disabled={assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {hasValue ? getLetterGrade(grades[enrollment.id]) : '—'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {isDraft ? (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-secondary-foreground/50" />
+                                  Draft
+                                </span>
+                              ) : isSubmitted ? (
+                                <span className="text-xs text-primary flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Saved
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                       {enrollments.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                             No students enrolled in this subject
                           </TableCell>
                         </TableRow>
