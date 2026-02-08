@@ -1172,7 +1172,7 @@ export default function AdminDashboard() {
                         variant="outline"
                         onClick={() => resolveFeedback(item.id)}
                       >
-                        <CheckCircle className="h-4 w-4 mr-1" />
+                        <CheckCircle className="h-4 w-4 mr-1 text-green-500" />
                         Mark Resolved
                       </Button>
                     )}
