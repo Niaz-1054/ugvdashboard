@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { BookOpen, Users, Loader2, Save, AlertCircle, BarChart3 } from 'lucide-react';
+import { BookOpen, Users, Loader2, Save, AlertCircle, BarChart3, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getGradeFromMarks } from '@/lib/gpa-calculator';
 import { GradeMapping } from '@/lib/supabase-types';
@@ -24,6 +24,7 @@ export default function TeacherDashboard() {
   const [grades, setGrades] = useState<Record<string, number>>({});
   const [gradeMappings, setGradeMappings] = useState<GradeMapping[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState('grades');
 
   useEffect(() => {
@@ -113,6 +114,8 @@ export default function TeacherDashboard() {
   }, [selectedAssignment]);
 
   const handleGradeChange = (enrollmentId: string, marks: number) => {
+    // Clear success state when user starts editing
+    if (saveSuccess) setSaveSuccess(false);
     setGrades(prev => ({
       ...prev,
       [enrollmentId]: marks
@@ -168,8 +171,12 @@ export default function TeacherDashboard() {
       }
 
       console.log('Grades saved successfully:', data);
+      setSaveSuccess(true);
       toast.success('Grades saved successfully');
       fetchEnrollments(selectedAssignment);
+      
+      // Auto-clear success state after 5 seconds
+      setTimeout(() => setSaveSuccess(false), 5000);
     } catch (error) {
       console.error('Error saving grades:', error);
       toast.error('Failed to save grades');
@@ -289,6 +296,12 @@ export default function TeacherDashboard() {
                     <div className="flex items-center gap-2">
                       {assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked && (
                         <Badge variant="secondary">Semester Locked</Badge>
+                      )}
+                      {saveSuccess && (
+                        <div className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium animate-in fade-in slide-in-from-right-2 duration-300">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span>Grades Saved</span>
+                        </div>
                       )}
                       <Button 
                         onClick={saveGrades} 
