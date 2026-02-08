@@ -9,6 +9,7 @@ import {
 import { TrendingUp, TrendingDown, AlertTriangle, Award, Target, Lightbulb } from 'lucide-react';
 import { SemesterGPA } from '@/lib/supabase-types';
 import { getGPAStatus, isAtAcademicRisk } from '@/lib/gpa-calculator';
+import { compareSemesters } from '@/lib/semester-utils';
 
 interface GPAInsightsProps {
   semesterData: SemesterGPA[];
@@ -21,26 +22,31 @@ export function GPAInsights({ semesterData, cgpa, totalCredits, earnedCredits }:
   const atRisk = isAtAcademicRisk(cgpa);
   const gpaStatus = getGPAStatus(cgpa);
 
-  // Calculate GPA trend
-  const gpaTrend = semesterData.map((sem, index) => ({
+  // Sort semester data chronologically for trend chart
+  const sortedSemesterData = [...semesterData].sort((a, b) => 
+    compareSemesters(a.semesterName, b.semesterName)
+  );
+
+  // Calculate GPA trend from sorted data
+  const gpaTrend = sortedSemesterData.map((sem, index) => ({
     semester: sem.semesterName,
     gpa: sem.gpa,
-    cgpa: calculateCGPAUpTo(semesterData, index)
+    cgpa: calculateCGPAUpTo(sortedSemesterData, index)
   }));
 
-  // Calculate improvement/decline
-  const latestGPA = semesterData.length > 0 ? semesterData[semesterData.length - 1].gpa : 0;
-  const previousGPA = semesterData.length > 1 ? semesterData[semesterData.length - 2].gpa : latestGPA;
+  // Calculate improvement/decline from sorted data
+  const latestGPA = sortedSemesterData.length > 0 ? sortedSemesterData[sortedSemesterData.length - 1].gpa : 0;
+  const previousGPA = sortedSemesterData.length > 1 ? sortedSemesterData[sortedSemesterData.length - 2].gpa : latestGPA;
   const gpaDiff = latestGPA - previousGPA;
   const isImproving = gpaDiff >= 0;
 
   // Get struggling subjects (grade point < 2.0)
-  const strugglingSubjects = semesterData
+  const strugglingSubjects = sortedSemesterData
     .flatMap(s => s.subjects)
     .filter(s => s.gradePoint < 2.0 && s.gradePoint > 0);
 
   // Get strong subjects (grade point >= 3.5)
-  const strongSubjects = semesterData
+  const strongSubjects = sortedSemesterData
     .flatMap(s => s.subjects)
     .filter(s => s.gradePoint >= 3.5);
 
