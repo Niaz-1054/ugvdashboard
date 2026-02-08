@@ -69,16 +69,22 @@ export default function TeacherDashboard() {
     if (!assignment) return;
 
     try {
-      // Fetch enrollments for this subject/semester
+      // Fetch enrollments for this subject/semester using LEFT JOINs
       const { data: enrollmentsData, error } = await supabase
         .from('enrollments')
         .select(`
-          *,
-          profiles(id, full_name, student_id, email),
-          grades(id, marks, grade_mapping_id, grade_mappings(letter_grade, grade_point))
+          id,
+          student_id,
+          subject_id,
+          semester_id,
+          profiles:profiles!left(id, full_name, student_id, email),
+          grades:grades!left(id, marks, grade_mapping_id, grade_mappings(letter_grade, grade_point))
         `)
         .eq('subject_id', assignment.subject_id)
         .eq('semester_id', assignment.semester_id);
+      
+      // Debug log - remove after confirming fix
+      console.log('Enrollments data:', enrollmentsData);
 
       if (error) throw error;
       
@@ -297,22 +303,26 @@ export default function TeacherDashboard() {
                     <TableBody>
                       {enrollments.map((enrollment) => (
                         <TableRow key={enrollment.id}>
-                          <TableCell className="font-mono">{enrollment.profiles?.student_id}</TableCell>
-                          <TableCell>{enrollment.profiles?.full_name}</TableCell>
+                          <TableCell className="font-mono">
+                            {enrollment.profiles?.student_id ?? '—'}
+                          </TableCell>
+                          <TableCell>
+                            {enrollment.profiles?.full_name ?? '—'}
+                          </TableCell>
                           <TableCell>
                             <Input
                               type="number"
                               min="0"
                               max="100"
                               className="w-24"
-                              value={grades[enrollment.id] || ''}
+                              value={grades[enrollment.id] ?? ''}
                               onChange={(e) => handleGradeChange(enrollment.id, parseFloat(e.target.value))}
                               disabled={assignments.find(a => a.id === selectedAssignment)?.semesters?.is_locked}
                             />
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">
-                              {grades[enrollment.id] !== undefined ? getLetterGrade(grades[enrollment.id]) : '-'}
+                              {grades[enrollment.id] !== undefined ? getLetterGrade(grades[enrollment.id]) : '—'}
                             </Badge>
                           </TableCell>
                         </TableRow>
