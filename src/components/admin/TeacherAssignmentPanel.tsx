@@ -67,9 +67,10 @@ export function TeacherAssignmentPanel({
   const [pendingChanges, setPendingChanges] = useState<Map<string, boolean>>(new Map());
   const [isSaving, setIsSaving] = useState(false);
 
-  // Get active semesters only, sorted chronologically with ordinal labels
+  // Get active semesters only, sorted chronologically DESCENDING (newest first = 1st Semester)
   const activeSemesters = useMemo(() => {
-    const allSorted = sortSemestersChronologically(semesters);
+    // Sort chronologically ascending, then reverse so newest is first
+    const allSorted = sortSemestersChronologically(semesters).reverse();
     return allSorted
       .map((s, index) => ({ ...s, ordinalLabel: getOrdinal(index + 1) }))
       .filter(s => !s.is_locked);
