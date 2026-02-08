@@ -130,34 +130,44 @@ export default function TeacherDashboard() {
     }
 
     try {
-      for (const enrollment of enrollments) {
-        const marks = grades[enrollment.id];
-        if (marks === undefined) continue;
+      // Prepare all grade records for upsert
+      const gradeRecords = enrollments
+        .filter(enrollment => grades[enrollment.id] !== undefined && !isNaN(grades[enrollment.id]))
+        .map(enrollment => {
+          const marks = grades[enrollment.id];
+          const gradeMapping = getGradeFromMarks(marks, gradeMappings);
+          return {
+            enrollment_id: enrollment.id,
+            marks,
+            grade_mapping_id: gradeMapping?.id || null
+          };
+        });
 
-        // Find appropriate grade mapping
-        const gradeMapping = getGradeFromMarks(marks, gradeMappings);
-
-        if (enrollment.grades?.[0]) {
-          // Update existing grade
-          await supabase
-            .from('grades')
-            .update({
-              marks,
-              grade_mapping_id: gradeMapping?.id || null
-            })
-            .eq('id', enrollment.grades[0].id);
-        } else {
-          // Insert new grade
-          await supabase
-            .from('grades')
-            .insert({
-              enrollment_id: enrollment.id,
-              marks,
-              grade_mapping_id: gradeMapping?.id || null
-            });
-        }
+      if (gradeRecords.length === 0) {
+        toast.error('No valid marks to save');
+        setSaving(false);
+        return;
       }
 
+      // Debug: Log the payload being sent
+      console.log('Saving grades payload:', JSON.stringify(gradeRecords, null, 2));
+
+      // Use upsert with enrollment_id as conflict key (grades has 1-to-1 with enrollments)
+      const { data, error } = await supabase
+        .from('grades')
+        .upsert(gradeRecords, {
+          onConflict: 'enrollment_id',
+          ignoreDuplicates: false
+        })
+        .select();
+
+      if (error) {
+        console.error('Supabase error saving grades:', error);
+        toast.error(`Failed to save grades: ${error.message}`);
+        return;
+      }
+
+      console.log('Grades saved successfully:', data);
       toast.success('Grades saved successfully');
       fetchEnrollments(selectedAssignment);
     } catch (error) {
