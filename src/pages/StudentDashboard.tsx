@@ -4,6 +4,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -33,8 +34,22 @@ export default function StudentDashboard() {
   const [feedback, setFeedback] = useState({ subject: '', message: '' });
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   
-  // GPA Simulator state
-  const [simulatorGrades, setSimulatorGrades] = useState<Record<string, number>>({});
+  // GPA Simulator state - stores selected grade points keyed by enrollment id
+  const [simulatedGradePoints, setSimulatedGradePoints] = useState<Record<string, number>>({});
+  
+  // Fixed grade options for simulator
+  const gradeOptions = [
+    { label: 'A+', gradePoint: 4.00 },
+    { label: 'A',  gradePoint: 3.75 },
+    { label: 'A-', gradePoint: 3.50 },
+    { label: 'B+', gradePoint: 3.25 },
+    { label: 'B',  gradePoint: 3.00 },
+    { label: 'B-', gradePoint: 2.75 },
+    { label: 'C+', gradePoint: 2.50 },
+    { label: 'C',  gradePoint: 2.25 },
+    { label: 'D',  gradePoint: 2.00 },
+    { label: 'F',  gradePoint: 0.00 },
+  ];
 
   useEffect(() => {
     if (user) {
@@ -60,16 +75,15 @@ export default function StudentDashboard() {
       if (enrollmentsData) {
         setEnrollments(enrollmentsData);
         
-        // Initialize simulator grades
-        // Note: grades is a single object (one-to-one), not an array
+        // Initialize simulator with actual grade points (fallback for simulation)
         const initial: Record<string, number> = {};
         enrollmentsData.forEach((e: any) => {
           const grade = Array.isArray(e.grades) ? e.grades[0] : e.grades;
-          if (grade?.marks !== undefined) {
-            initial[e.id] = grade.marks;
+          if (grade?.grade_mappings?.grade_point !== undefined) {
+            initial[e.id] = grade.grade_mappings.grade_point;
           }
         });
-        setSimulatorGrades(initial);
+        setSimulatedGradePoints(initial);
       }
 
       // Fetch grade mappings
@@ -136,21 +150,30 @@ export default function StudentDashboard() {
   const gpaStatus = getGPAStatus(cgpa);
   const atRisk = isAtAcademicRisk(cgpa);
 
-  // Simulator calculations
+  // Simulator calculations using selected grade points
   const getSimulatedGPA = () => {
-    const simulatedSubjects: SubjectGrade[] = enrollments.map((e: any) => {
-      const marks = simulatorGrades[e.id] || 0;
-      const gradeMapping = getGradeFromMarks(marks, gradeMappings);
-      return {
-        subjectCode: e.subjects.code,
-        subjectName: e.subjects.name,
-        credits: e.subjects.credits,
-        marks,
-        letterGrade: gradeMapping?.letter_grade || 'F',
-        gradePoint: gradeMapping?.grade_point || 0
-      };
+    if (enrollments.length === 0) return 0;
+    
+    let totalWeightedPoints = 0;
+    let totalCredits = 0;
+    
+    enrollments.forEach((e: any) => {
+      const credits = e.subjects.credits || 0;
+      // Use simulated grade point, or fall back to actual grade
+      const actualGrade = Array.isArray(e.grades) ? e.grades[0] : e.grades;
+      const gradePoint = simulatedGradePoints[e.id] ?? actualGrade?.grade_mappings?.grade_point ?? 0;
+      
+      totalWeightedPoints += credits * gradePoint;
+      totalCredits += credits;
     });
-    return calculateGPA(simulatedSubjects);
+    
+    return totalCredits > 0 ? totalWeightedPoints / totalCredits : 0;
+  };
+  
+  // Get the grade label from a grade point
+  const getGradeLabelFromPoint = (gradePoint: number): string => {
+    const grade = gradeOptions.find(g => g.gradePoint === gradePoint);
+    return grade?.label || 'F';
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -369,7 +392,7 @@ export default function StudentDashboard() {
                   GPA Simulator
                 </CardTitle>
                 <CardDescription>
-                  Adjust marks to simulate potential GPA outcomes. Changes here do not affect your actual grades.
+                  Select grades to simulate potential GPA outcomes. Changes here do not affect your actual grades.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -383,38 +406,54 @@ export default function StudentDashboard() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Subject</TableHead>
-                      <TableHead>Credits</TableHead>
-                      <TableHead>Simulated Marks</TableHead>
-                      <TableHead>Projected Grade</TableHead>
+                      <TableHead className="text-center">Credits</TableHead>
+                      <TableHead>Simulated Grade</TableHead>
+                      <TableHead className="text-center">Grade Points</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {enrollments.map((enrollment) => {
-                      const marks = simulatorGrades[enrollment.id] || 0;
-                      const gradeMapping = getGradeFromMarks(marks, gradeMappings);
+                      const actualGrade = Array.isArray(enrollment.grades) ? enrollment.grades[0] : enrollment.grades;
+                      const actualGradePoint = actualGrade?.grade_mappings?.grade_point ?? 0;
+                      const simulatedPoint = simulatedGradePoints[enrollment.id] ?? actualGradePoint;
+                      const isSimulated = simulatedGradePoints[enrollment.id] !== undefined && 
+                                          simulatedGradePoints[enrollment.id] !== actualGradePoint;
+                      
                       return (
                         <TableRow key={enrollment.id}>
                           <TableCell>
-                            <span className="font-mono text-sm">{enrollment.subjects.code}</span>
+                            <span className="font-mono text-sm text-muted-foreground">{enrollment.subjects.code}</span>
                             <span className="ml-2">{enrollment.subjects.name}</span>
                           </TableCell>
-                          <TableCell>{enrollment.subjects.credits}</TableCell>
+                          <TableCell className="text-center">{enrollment.subjects.credits}</TableCell>
                           <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              max="100"
-                              className="w-24"
-                              value={simulatorGrades[enrollment.id] || ''}
-                              onChange={(e) => setSimulatorGrades(prev => ({
-                                ...prev,
-                                [enrollment.id]: parseFloat(e.target.value) || 0
-                              }))}
-                            />
+                            <Select
+                              value={simulatedPoint.toFixed(2)}
+                              onValueChange={(value) => {
+                                setSimulatedGradePoints(prev => ({
+                                  ...prev,
+                                  [enrollment.id]: parseFloat(value)
+                                }));
+                              }}
+                            >
+                              <SelectTrigger className={`w-28 ${isSimulated ? 'border-primary bg-primary/5' : ''}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {gradeOptions.map((grade) => (
+                                  <SelectItem 
+                                    key={grade.label} 
+                                    value={grade.gradePoint.toFixed(2)}
+                                  >
+                                    {grade.label} ({grade.gradePoint.toFixed(2)})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
-                              {gradeMapping?.letter_grade || 'F'} ({gradeMapping?.grade_point.toFixed(2) || '0.00'})
+                          <TableCell className="text-center">
+                            <Badge variant={isSimulated ? 'default' : 'outline'}>
+                              {simulatedPoint.toFixed(2)}
                             </Badge>
                           </TableCell>
                         </TableRow>
