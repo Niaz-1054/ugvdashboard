@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Users, BookOpen, Calendar, GraduationCap, Settings, 
-  Plus, Lock, Unlock, Loader2, CheckCircle, UserPlus, Trash2, Star, Database, UsersRound
+  Plus, Lock, Unlock, Loader2, CheckCircle, UserPlus, Trash2, Star
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole } from '@/lib/supabase-types';
@@ -53,8 +53,6 @@ export default function AdminDashboard() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [isSeedingMore, setIsSeedingMore] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -393,79 +391,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleSeedData = async () => {
-    setIsSeeding(true);
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      
-      const response = await supabase.functions.invoke('seed-academic-data', {
-        headers: {
-          Authorization: `Bearer ${session?.session?.access_token}`
-        }
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message || 'Failed to seed data');
-      }
-
-      if (response.data?.error) {
-        toast.error(response.data.error || 'Failed to seed data');
-      } else {
-        const result = response.data.result;
-        const totalCreated = (result.sessions_created || 0) + (result.semesters_created || 0) + 
-                            (result.subjects_created || 0) + (result.enrollments_created || 0) + 
-                            (result.teacher_assignments_created || 0) + (result.grades_created || 0);
-        
-        if (totalCreated === 0) {
-          toast.info('Data already seeded! All 8 semesters with enrollments and grades are in place.');
-        } else {
-          toast.success(
-            `Multi-semester seeding complete! Created: ${result.semesters_created || 0} semesters, ` +
-            `${result.subjects_created || 0} subjects, ${result.enrollments_created || 0} enrollments, ` +
-            `${result.grades_created || 0} grades across all 8 semesters`
-          );
-        }
-        fetchAllData();
-      }
-    } catch (error: any) {
-      console.error('Seeding error:', error);
-      toast.error(error.message || 'Failed to seed data');
-    } finally {
-      setIsSeeding(false);
-    }
-  };
-
-  const handleSeedMoreStudents = async () => {
-    setIsSeedingMore(true);
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      
-      const response = await supabase.functions.invoke('seed-more-students', {
-        headers: {
-          Authorization: `Bearer ${session?.session?.access_token}`
-        }
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message || 'Failed to add students');
-      }
-
-      if (response.data?.error) {
-        toast.error(response.data.error || 'Failed to add students');
-      } else {
-        const details = response.data.details;
-        toast.success(
-          `Added ${details.students_created} new students with ${details.enrollments_created} enrollments and ${details.grades_created} grades!`
-        );
-        fetchAllData();
-      }
-    } catch (error: any) {
-      console.error('Add students error:', error);
-      toast.error(error.message || 'Failed to add students');
-    } finally {
-      setIsSeedingMore(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -480,31 +405,9 @@ export default function AdminDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">Admin Dashboard</h2>
-            <p className="text-muted-foreground">Manage the academic system</p>
-          </div>
-          <div className="flex gap-2">
-            <Button 
-              onClick={handleSeedData} 
-              disabled={isSeeding || isSeedingMore}
-              variant="outline"
-              className="gap-2"
-            >
-              {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
-              {isSeeding ? 'Seeding...' : 'Seed Demo Data'}
-            </Button>
-            <Button 
-              onClick={handleSeedMoreStudents} 
-              disabled={isSeeding || isSeedingMore}
-              variant="outline"
-              className="gap-2"
-            >
-              {isSeedingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <UsersRound className="h-4 w-4" />}
-              {isSeedingMore ? 'Adding...' : 'Add 25 Students'}
-            </Button>
-          </div>
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Admin Dashboard</h2>
+          <p className="text-muted-foreground">Manage the academic system</p>
         </div>
 
         {/* Stats */}
