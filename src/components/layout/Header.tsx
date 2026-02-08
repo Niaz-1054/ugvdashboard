@@ -25,7 +25,7 @@ export const Header = () => {
             className="h-10 w-auto"
           />
           <div>
-            <h1 className="text-lg font-semibold text-foreground">UGV Portal</h1>
+            <h1 className="text-lg font-semibold text-foreground">UGV Result Analysis & GPA Dashboard</h1>
             <p className="text-xs text-muted-foreground">University of Global Village</p>
           </div>
         </div>
