@@ -367,8 +367,6 @@ export default function TeacherDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Student ID</TableHead>
-                        <TableHead>Name</TableHead>
                         <TableHead className="w-28">Student ID</TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead className="w-32">Marks (0-100)</TableHead>
