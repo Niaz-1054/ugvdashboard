@@ -29,9 +29,10 @@ export function GPAInsights({ semesterData, cgpa, totalCredits, earnedCredits }:
     compareSemesters(a.semesterName, b.semesterName)
   );
 
-  // Calculate GPA trend from sorted data
+  // Calculate GPA trend from sorted data with ordinal semester labels
   const gpaTrend = sortedSemesterData.map((sem, index) => ({
-    semester: sem.semesterName,
+    semester: getOrdinalSemesterLabel(index + 1),
+    fullLabel: `${getOrdinalSemesterLabel(index + 1)} (${sem.semesterName})`,
     gpa: Math.min(4.0, Math.round(sem.gpa * 100) / 100),
     cgpa: Math.min(4.0, Math.round(calculateCGPAUpTo(sortedSemesterData, index) * 100) / 100)
   }));
@@ -111,7 +112,12 @@ export function GPAInsights({ semesterData, cgpa, totalCredits, earnedCredits }:
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="semester" fontSize={12} />
                 <YAxis domain={[0, 4]} fontSize={12} />
-                <Tooltip />
+                <Tooltip 
+                  labelFormatter={(label, payload) => {
+                    const item = payload?.[0]?.payload;
+                    return item?.fullLabel || label;
+                  }}
+                />
                 <Area 
                   type="monotone" 
                   dataKey="gpa" 
@@ -388,6 +394,14 @@ function generatePersonalizedRecommendations(data: {
   }
 
   return recommendations;
+}
+
+// Helper function to get ordinal semester label
+function getOrdinalSemesterLabel(n: number): string {
+  const suffixes = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  const suffix = suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0];
+  return `${n}${suffix} Sem`;
 }
 
 // Helper functions
