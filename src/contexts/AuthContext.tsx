@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { AppRole, Profile } from '@/lib/supabase-types';
@@ -6,10 +6,17 @@ import { AppRole, Profile } from '@/lib/supabase-types';
 interface AuthContextType {
   user: User | null;
   session: Session | null;
+  token: string | null;
   profile: Profile | null;
   role: AppRole | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, role: AppRole, studentId?: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    role: AppRole,
+    studentId?: string
+  ) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   checkAdminExists: () => Promise<boolean>;
@@ -28,15 +35,19 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
+
+  // Split loading so we never mark the app as "ready" until BOTH session hydration and role/profile fetch are done.
+  const [authLoading, setAuthLoading] = useState(true);
+  const [userDataLoading, setUserDataLoading] = useState(false);
+
+  const loading = useMemo(() => authLoading || userDataLoading, [authLoading, userDataLoading]);
 
   // Fetch user data and return the role (for proper sequencing)
   const fetchUserData = useCallback(async (userId: string): Promise<AppRole | null> => {
     try {
-      // Fetch profile and role in parallel
       const [profileResult, roleResult] = await Promise.all([
         supabase
           .from('profiles')
@@ -52,6 +63,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (profileResult.data) {
         setProfile(profileResult.data as Profile);
+      } else {
+        setProfile(null);
       }
 
       if (roleResult.data) {
@@ -59,77 +72,105 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setRole(userRole);
         return userRole;
       }
-      
+
+      setRole(null);
       return null;
     } catch (error) {
       console.error('Error fetching user data:', error);
+      setProfile(null);
+      setRole(null);
       return null;
     }
   }, []);
 
+  // 1) Subscribe to auth changes (synchronous callback only)
+  // 2) Hydrate initial session on mount
   useEffect(() => {
     let isMounted = true;
 
-    // Initialize auth state
-    const initializeAuth = async () => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, newSession) => {
+      if (!isMounted) return;
+
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
+
+      const accessToken = newSession?.access_token ?? null;
+      setToken(accessToken);
+
+      // Mirror the access token for demo/debug purposes; Supabase session persistence remains the source of truth.
+      if (accessToken) {
+        localStorage.setItem('token', accessToken);
+      } else {
+        localStorage.removeItem('token');
+      }
+    });
+
+    const hydrate = async () => {
+      setAuthLoading(true);
       try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        
+        const storedToken = localStorage.getItem('token');
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+
         if (!isMounted) return;
 
-        if (currentSession?.user) {
-          setSession(currentSession);
-          setUser(currentSession.user);
-          // Wait for role to be fetched before setting loading to false
-          await fetchUserData(currentSession.user.id);
-        } else {
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-          setRole(null);
+        if (error) {
+          console.error('Error getting session:', error);
+        }
+
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+
+        const accessToken = currentSession?.access_token ?? storedToken ?? null;
+        setToken(accessToken);
+
+        if (currentSession?.access_token) {
+          localStorage.setItem('token', currentSession.access_token);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
       } finally {
         if (isMounted) {
-          setLoading(false);
-          setInitialized(true);
+          setAuthLoading(false);
         }
       }
     };
 
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        if (!isMounted) return;
-        
-        // Only process after initial load to avoid race conditions
-        if (!initialized && event !== 'INITIAL_SESSION') return;
-
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-
-        if (newSession?.user) {
-          // Use setTimeout to avoid Supabase deadlock
-          setTimeout(async () => {
-            if (isMounted) {
-              await fetchUserData(newSession.user.id);
-            }
-          }, 0);
-        } else {
-          setProfile(null);
-          setRole(null);
-        }
-      }
-    );
-
-    initializeAuth();
+    hydrate();
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchUserData, initialized]);
+  }, []);
+
+  // Fetch profile/role whenever the authenticated user changes.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadUserData = async () => {
+      if (!user) {
+        setProfile(null);
+        setRole(null);
+        setUserDataLoading(false);
+        return;
+      }
+
+      setUserDataLoading(true);
+      try {
+        await fetchUserData(user.id);
+      } finally {
+        if (!cancelled) {
+          setUserDataLoading(false);
+        }
+      }
+    };
+
+    loadUserData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, fetchUserData]);
 
   // Check if any admin exists (for bootstrap logic)
   const checkAdminExists = async (): Promise<boolean> => {
@@ -138,12 +179,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .from('user_roles')
         .select('*', { count: 'exact', head: true })
         .eq('role', 'admin');
-      
+
       if (error) {
         console.error('Error checking admin existence:', error);
         return true; // Assume admin exists on error (safer)
       }
-      
+
       return (count ?? 0) > 0;
     } catch (error) {
       console.error('Error checking admin existence:', error);
@@ -152,14 +193,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signUp = async (
-    email: string, 
-    password: string, 
-    fullName: string, 
+    email: string,
+    password: string,
+    fullName: string,
     role: AppRole,
     studentId?: string
   ): Promise<{ error: Error | null }> => {
     try {
-      // Use the edge function for signup to bypass RLS issues
+      // Use the backend function for signup to bypass RLS issues
       const response = await supabase.functions.invoke('signup-user', {
         body: {
           email,
@@ -186,10 +227,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signIn = async (email: string, password: string): Promise<{ error: Error | null }> => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
+
+      // Mirror token immediately on successful login.
+      const accessToken = data?.session?.access_token ?? null;
+      if (accessToken) {
+        localStorage.setItem('token', accessToken);
+        setToken(accessToken);
+      }
+
       return { error };
     } catch (error) {
       return { error: error as Error };
@@ -197,17 +246,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setProfile(null);
-    setRole(null);
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      localStorage.removeItem('token');
+      setToken(null);
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      setRole(null);
+    }
   };
 
   return (
     <AuthContext.Provider value={{
       user,
       session,
+      token,
       profile,
       role,
       loading,
@@ -220,3 +275,4 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     </AuthContext.Provider>
   );
 };
+

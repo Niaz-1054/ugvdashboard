@@ -30,7 +30,7 @@ export default function Auth() {
   const [success, setSuccess] = useState<string | null>(null);
   const [adminExists, setAdminExists] = useState<boolean | null>(null);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
-  const { signIn, signUp, role, checkAdminExists } = useAuth();
+  const { signIn, signUp, user, role, loading, checkAdminExists } = useAuth();
   const navigate = useNavigate();
 
   // Check if admin exists on mount (for bootstrap logic)
@@ -44,8 +44,11 @@ export default function Auth() {
     checkAdmin();
   }, [checkAdminExists]);
 
-  // Redirect if already logged in
-  if (role) {
+  // Redirect if already logged in (ONLY after auth has fully resolved)
+  useEffect(() => {
+    if (loading) return;
+    if (!user || !role) return;
+
     switch (role) {
       case 'admin':
         navigate('/admin', { replace: true });
@@ -57,7 +60,7 @@ export default function Auth() {
         navigate('/student', { replace: true });
         break;
     }
-  }
+  }, [loading, user, role, navigate]);
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({
