@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area, Line
 } from 'recharts';
-import { TrendingUp, TrendingDown, AlertTriangle, Award, Target, Lightbulb, Star, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, Award, Lightbulb, Star } from 'lucide-react';
 import { SemesterGPA, SubjectGrade } from '@/lib/supabase-types';
 import { getGPAStatus, isAtAcademicRisk } from '@/lib/gpa-calculator';
 import { compareSemesters } from '@/lib/semester-utils';
@@ -166,25 +166,32 @@ export function GPAInsights({ semesterData, cgpa, totalCredits, earnedCredits }:
           </CardContent>
         </Card>
 
-        {/* Target GPA Card */}
+        {/* Plan for Improvement Card */}
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-blue-100">
-                <Target className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-bold">
-                    {requiredGPAForTarget > 4.0 ? '4.00+' : requiredGPAForTarget.toFixed(2)}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground">GPA needed for 3.0 CGPA</p>
-                {requiredGPAForTarget > 4.0 && (
-                  <p className="text-xs text-amber-600 mt-1">May require multiple semesters</p>
-                )}
-              </div>
-            </div>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Lightbulb className="h-5 w-5 text-blue-500" />
+              Plan for Improvement
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {recommendations.length > 0 ? (
+              <ul className="space-y-2">
+                {recommendations.slice(0, 2).map((recommendation, idx) => (
+                  <li 
+                    key={idx}
+                    className="flex gap-2 text-sm text-muted-foreground"
+                  >
+                    <span className="flex-shrink-0 w-1.5 h-1.5 mt-2 rounded-full bg-blue-500" />
+                    <span className="line-clamp-2">{recommendation}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Personalized guidance will appear after grades are published.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -249,34 +256,6 @@ export function GPAInsights({ semesterData, cgpa, totalCredits, earnedCredits }:
         </CardContent>
       </Card>
 
-      {/* Personalized Improvement Recommendations */}
-      {recommendations.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Lightbulb className="h-5 w-5 text-blue-500" />
-              Improvement Insights
-            </CardTitle>
-            <CardDescription className="flex items-center gap-1.5">
-              <Info className="h-3.5 w-3.5" />
-              Personalized recommendations based on your performance
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3">
-              {recommendations.slice(0, 3).map((recommendation, idx) => (
-                <li 
-                  key={idx}
-                  className="flex gap-3 text-sm text-muted-foreground"
-                >
-                  <span className="flex-shrink-0 w-1.5 h-1.5 mt-2 rounded-full bg-blue-500" />
-                  <span>{recommendation}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
