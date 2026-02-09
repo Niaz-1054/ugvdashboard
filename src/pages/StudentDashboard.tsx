@@ -273,7 +273,11 @@ export default function StudentDashboard() {
                   <p className="text-3xl font-bold">
                     {semesterData.length > 0 ? semesterData[semesterData.length - 1].gpa.toFixed(2) : '-'}
                   </p>
-                  <p className="text-sm text-muted-foreground">Latest GPA</p>
+                  <p className="text-sm text-muted-foreground">
+                    {semesterData.length > 0 
+                      ? `${semesterData[semesterData.length - 1].semesterName} (${semesterData[semesterData.length - 1].sessionName})`
+                      : 'No semester data'}
+                  </p>
                 </div>
               </div>
             </CardContent>
