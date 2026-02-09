@@ -52,6 +52,13 @@ export default function StudentDashboard() {
     { label: 'F',  gradePoint: 0.00 },
   ];
 
+  // Helper to get ordinal suffix (1st, 2nd, 3rd, etc.)
+  const getOrdinal = (n: number): string => {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
   useEffect(() => {
     if (user) {
       fetchStudentData();
@@ -275,7 +282,7 @@ export default function StudentDashboard() {
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {semesterData.length > 0 
-                      ? `${semesterData[semesterData.length - 1].semesterName} (${semesterData[semesterData.length - 1].sessionName})`
+                      ? `${getOrdinal(semesterData.length)} Semester GPA`
                       : 'No semester data'}
                   </p>
                 </div>
