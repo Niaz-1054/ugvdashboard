@@ -22,6 +22,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
     // Create admin client with service role key
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
@@ -72,23 +73,25 @@ Deno.serve(async (req) => {
       );
     }
 
-    // BOOTSTRAP LOGIC: Check if admin signup is allowed
+    // Check if any admin exists in the system
+    const { count: adminCount, error: adminCountError } = await adminClient
+      .from('user_roles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'admin');
+
+    if (adminCountError) {
+      console.error('Error checking admin count:', adminCountError);
+      return new Response(
+        JSON.stringify({ error: 'Internal Server Error', message: 'Failed to verify system state' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const hasAdminInSystem = (adminCount ?? 0) > 0;
+
+    // BOOTSTRAP LOGIC: Allow first admin signup without authentication
     if (body.role === 'admin') {
-      const { count, error: countError } = await adminClient
-        .from('user_roles')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'admin');
-
-      if (countError) {
-        console.error('Error checking admin count:', countError);
-        return new Response(
-          JSON.stringify({ error: 'Internal Server Error', message: 'Failed to verify admin eligibility' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Only allow first admin via public signup
-      if (count && count > 0) {
+      if (hasAdminInSystem) {
         console.log('Admin already exists, blocking public admin signup');
         return new Response(
           JSON.stringify({ 
@@ -98,8 +101,67 @@ Deno.serve(async (req) => {
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
       console.log('No admin exists, allowing first admin signup');
+    }
+
+    // SECURITY: After bootstrap, require admin authentication for ALL signups
+    if (hasAdminInSystem) {
+      const authHeader = req.headers.get('Authorization');
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('No auth token provided for signup after bootstrap');
+        return new Response(
+          JSON.stringify({ 
+            error: 'Unauthorized', 
+            message: 'Authentication required. Only administrators can create new accounts.' 
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Verify the requesting user's token and admin status
+      const token = authHeader.replace('Bearer ', '');
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+
+      const { data: claimsData, error: claimsError } = await userClient.auth.getUser(token);
+      
+      if (claimsError || !claimsData?.user) {
+        console.error('Invalid auth token:', claimsError);
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized', message: 'Invalid authentication token' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if the requesting user is an admin
+      const { data: requestingUserRole, error: roleError } = await adminClient
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', claimsData.user.id)
+        .maybeSingle();
+
+      if (roleError) {
+        console.error('Error checking requesting user role:', roleError);
+        return new Response(
+          JSON.stringify({ error: 'Internal Server Error', message: 'Failed to verify permissions' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (requestingUserRole?.role !== 'admin') {
+        console.log('Non-admin user attempted to create account:', claimsData.user.id);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Forbidden', 
+            message: 'Only administrators can create new accounts.' 
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('Admin user verified, proceeding with account creation');
     }
 
     // Check if user already exists in auth (handles orphaned users from failed signups)
