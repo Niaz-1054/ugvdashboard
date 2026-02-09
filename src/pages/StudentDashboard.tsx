@@ -38,6 +38,9 @@ export default function StudentDashboard() {
   // GPA Simulator state - stores selected grade points keyed by enrollment id
   const [simulatedGradePoints, setSimulatedGradePoints] = useState<Record<string, number>>({});
   
+  // Selected semester for transcript view (default to most recent)
+  const [selectedTranscriptSemester, setSelectedTranscriptSemester] = useState<string | null>(null);
+  
   // Fixed grade options for simulator
   const gradeOptions = [
     { label: 'A+', gradePoint: 4.00 },
@@ -330,56 +333,88 @@ export default function StudentDashboard() {
 
           {/* Transcript Tab */}
           <TabsContent value="transcript" className="space-y-4">
-            {semesterData.map((semester) => (
-              <Card key={semester.semesterId}>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle>{semester.semesterName}</CardTitle>
-                      <CardDescription>{semester.sessionName}</CardDescription>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold">{semester.gpa.toFixed(2)}</p>
-                      <p className="text-sm text-muted-foreground">Semester GPA</p>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Code</TableHead>
-                        <TableHead>Subject</TableHead>
-                        <TableHead className="text-center">Credits</TableHead>
-                        <TableHead className="text-center">Marks</TableHead>
-                        <TableHead className="text-center">Grade</TableHead>
-                        <TableHead className="text-center">Points</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {semester.subjects.map((subject, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-mono">{subject.subjectCode}</TableCell>
-                          <TableCell>{subject.subjectName}</TableCell>
-                          <TableCell className="text-center">{subject.credits}</TableCell>
-                          <TableCell className="text-center">{subject.marks || '-'}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="outline">{subject.letterGrade}</Badge>
-                          </TableCell>
-                          <TableCell className="text-center">{subject.gradePoint.toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <div className="flex justify-end mt-4 gap-4 text-sm text-muted-foreground">
-                    <span>Total Credits: {semester.totalCredits}</span>
-                    <span>Earned: {semester.earnedCredits}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {semesterData.length > 0 ? (
+              <>
+                {/* Semester Selection Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {semesterData.slice().reverse().map((semester, idx) => {
+                    const semesterNumber = semesterData.length - idx;
+                    const isSelected = selectedTranscriptSemester === semester.semesterId || 
+                      (!selectedTranscriptSemester && idx === 0);
+                    
+                    return (
+                      <Button
+                        key={semester.semesterId}
+                        variant={isSelected ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSelectedTranscriptSemester(semester.semesterId)}
+                        className="transition-all"
+                      >
+                        {getOrdinal(semesterNumber)} Semester – {semester.sessionName}
+                      </Button>
+                    );
+                  })}
+                </div>
 
-            {semesterData.length === 0 && (
+                {/* Selected Semester Result */}
+                {(() => {
+                  const activeSemesterId = selectedTranscriptSemester || semesterData[semesterData.length - 1]?.semesterId;
+                  const activeSemester = semesterData.find(s => s.semesterId === activeSemesterId);
+                  const semesterIndex = semesterData.findIndex(s => s.semesterId === activeSemesterId);
+                  
+                  if (!activeSemester) return null;
+                  
+                  return (
+                    <Card className="animate-in fade-in-50 duration-200">
+                      <CardHeader>
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <CardTitle>{getOrdinal(semesterIndex + 1)} Semester</CardTitle>
+                            <CardDescription>{activeSemester.sessionName}</CardDescription>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-bold">{activeSemester.gpa.toFixed(2)}</p>
+                            <p className="text-sm text-muted-foreground">Semester GPA</p>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Code</TableHead>
+                              <TableHead>Subject</TableHead>
+                              <TableHead className="text-center">Credits</TableHead>
+                              <TableHead className="text-center">Marks</TableHead>
+                              <TableHead className="text-center">Grade</TableHead>
+                              <TableHead className="text-center">Points</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {activeSemester.subjects.map((subject, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-mono">{subject.subjectCode}</TableCell>
+                                <TableCell>{subject.subjectName}</TableCell>
+                                <TableCell className="text-center">{subject.credits}</TableCell>
+                                <TableCell className="text-center">{subject.marks || '-'}</TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant="outline">{subject.letterGrade}</Badge>
+                                </TableCell>
+                                <TableCell className="text-center">{subject.gradePoint.toFixed(2)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        <div className="flex justify-end mt-4 gap-4 text-sm text-muted-foreground">
+                          <span>Total Credits: {activeSemester.totalCredits}</span>
+                          <span>Earned: {activeSemester.earnedCredits}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+              </>
+            ) : (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
                   <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
