@@ -41,6 +41,9 @@ export default function StudentDashboard() {
   // Selected semester for transcript view (default to most recent)
   const [selectedTranscriptSemester, setSelectedTranscriptSemester] = useState<string | null>(null);
   
+  // Selected semester for GPA simulator (default to most recent)
+  const [selectedSimulatorSemester, setSelectedSimulatorSemester] = useState<string | null>(null);
+  
   // Fixed grade options for simulator
   const gradeOptions = [
     { label: 'A+', gradePoint: 4.00 },
@@ -164,16 +167,16 @@ export default function StudentDashboard() {
   const gpaStatus = getGPAStatus(cgpa);
   const atRisk = isAtAcademicRisk(cgpa);
 
-  // Simulator calculations using selected grade points
-  const getSimulatedGPA = () => {
-    if (enrollments.length === 0) return 0;
+  // Simulator calculations for a specific semester
+  const getSimulatedSemesterGPA = (semesterId: string) => {
+    const semesterEnrollments = enrollments.filter(e => e.semester_id === semesterId);
+    if (semesterEnrollments.length === 0) return 0;
     
     let totalWeightedPoints = 0;
     let totalCredits = 0;
     
-    enrollments.forEach((e: any) => {
+    semesterEnrollments.forEach((e: any) => {
       const credits = e.subjects.credits || 0;
-      // Use simulated grade point, or fall back to actual grade
       const actualGrade = Array.isArray(e.grades) ? e.grades[0] : e.grades;
       const gradePoint = simulatedGradePoints[e.id] ?? actualGrade?.grade_mappings?.grade_point ?? 0;
       
@@ -436,91 +439,169 @@ export default function StudentDashboard() {
           </TabsContent>
 
           {/* GPA Simulator Tab */}
-          <TabsContent value="simulator">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calculator className="h-5 w-5" />
-                  GPA Simulator
-                </CardTitle>
-                <CardDescription>
-                  Select grades to simulate potential GPA outcomes. Changes here do not affect your actual grades.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-6 p-4 bg-accent/50 rounded-lg">
-                  <p className="text-lg">
-                    Simulated GPA: <span className="text-2xl font-bold text-primary">{getSimulatedGPA().toFixed(2)}</span>
-                  </p>
+          <TabsContent value="simulator" className="space-y-4">
+            {semesterData.length > 0 ? (
+              <>
+                {/* Semester Selection Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {semesterData.slice().reverse().map((semester, idx) => {
+                    const semesterNumber = semesterData.length - idx;
+                    const isSelected = selectedSimulatorSemester === semester.semesterId || 
+                      (!selectedSimulatorSemester && idx === 0);
+                    
+                    return (
+                      <Button
+                        key={semester.semesterId}
+                        variant={isSelected ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSelectedSimulatorSemester(semester.semesterId)}
+                        className="transition-all"
+                      >
+                        {getOrdinal(semesterNumber)} Semester
+                      </Button>
+                    );
+                  })}
                 </div>
 
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Subject</TableHead>
-                      <TableHead className="text-center">Credits</TableHead>
-                      <TableHead>Simulated Grade</TableHead>
-                      <TableHead className="text-center">Grade Points</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {enrollments.map((enrollment) => {
-                      const actualGrade = Array.isArray(enrollment.grades) ? enrollment.grades[0] : enrollment.grades;
-                      const actualGradePoint = actualGrade?.grade_mappings?.grade_point ?? 0;
-                      const simulatedPoint = simulatedGradePoints[enrollment.id] ?? actualGradePoint;
-                      const isSimulated = simulatedGradePoints[enrollment.id] !== undefined && 
-                                          simulatedGradePoints[enrollment.id] !== actualGradePoint;
-                      
-                      return (
-                        <TableRow key={enrollment.id}>
-                          <TableCell>
-                            <span className="font-mono text-sm text-muted-foreground">{enrollment.subjects.code}</span>
-                            <span className="ml-2">{enrollment.subjects.name}</span>
-                          </TableCell>
-                          <TableCell className="text-center">{enrollment.subjects.credits}</TableCell>
-                          <TableCell>
-                            <Select
-                              value={simulatedPoint.toFixed(2)}
-                              onValueChange={(value) => {
-                                setSimulatedGradePoints(prev => ({
-                                  ...prev,
-                                  [enrollment.id]: parseFloat(value)
-                                }));
-                              }}
-                            >
-                              <SelectTrigger className={`w-28 ${isSimulated ? 'border-primary bg-primary/5' : ''}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {gradeOptions.map((grade) => (
-                                  <SelectItem 
-                                    key={grade.label} 
-                                    value={grade.gradePoint.toFixed(2)}
-                                  >
-                                    {grade.label} ({grade.gradePoint.toFixed(2)})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={isSimulated ? 'default' : 'outline'}>
-                              {simulatedPoint.toFixed(2)}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                {/* Selected Semester Simulator */}
+                {(() => {
+                  const activeSemesterId = selectedSimulatorSemester || semesterData[semesterData.length - 1]?.semesterId;
+                  const activeSemester = semesterData.find(s => s.semesterId === activeSemesterId);
+                  const semesterIndex = semesterData.findIndex(s => s.semesterId === activeSemesterId);
+                  const semesterEnrollments = enrollments.filter(e => e.semester_id === activeSemesterId);
+                  
+                  if (!activeSemester) return null;
+                  
+                  const simulatedGPA = getSimulatedSemesterGPA(activeSemesterId);
+                  const gpaDiff = simulatedGPA - activeSemester.gpa;
+                  
+                  return (
+                    <Card className="animate-in fade-in-50 duration-200">
+                      <CardHeader>
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <CardTitle className="flex items-center gap-2">
+                              <Calculator className="h-5 w-5" />
+                              {getOrdinal(semesterIndex + 1)} Semester Simulator
+                            </CardTitle>
+                            <CardDescription>
+                              {activeSemester.sessionName} • Adjust grades to see potential GPA
+                            </CardDescription>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-muted-foreground">Simulated GPA</p>
+                            <div className="flex items-baseline gap-2">
+                              <p className="text-2xl font-bold text-primary">{simulatedGPA.toFixed(2)}</p>
+                              {gpaDiff !== 0 && (
+                                <span className={`text-sm font-medium ${gpaDiff > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {gpaDiff > 0 ? '+' : ''}{gpaDiff.toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Subject</TableHead>
+                              <TableHead className="text-center">Credits</TableHead>
+                              <TableHead>Simulated Grade</TableHead>
+                              <TableHead className="text-center">Points</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {semesterEnrollments.map((enrollment) => {
+                              const actualGrade = Array.isArray(enrollment.grades) ? enrollment.grades[0] : enrollment.grades;
+                              const actualGradePoint = actualGrade?.grade_mappings?.grade_point ?? 0;
+                              const simulatedPoint = simulatedGradePoints[enrollment.id] ?? actualGradePoint;
+                              const isSimulated = simulatedGradePoints[enrollment.id] !== undefined && 
+                                                  simulatedGradePoints[enrollment.id] !== actualGradePoint;
+                              
+                              return (
+                                <TableRow key={enrollment.id} className={isSimulated ? 'bg-primary/5' : ''}>
+                                  <TableCell>
+                                    <span className="font-mono text-sm text-muted-foreground">{enrollment.subjects.code}</span>
+                                    <span className="ml-2">{enrollment.subjects.name}</span>
+                                  </TableCell>
+                                  <TableCell className="text-center">{enrollment.subjects.credits}</TableCell>
+                                  <TableCell>
+                                    <Select
+                                      value={simulatedPoint.toFixed(2)}
+                                      onValueChange={(value) => {
+                                        setSimulatedGradePoints(prev => ({
+                                          ...prev,
+                                          [enrollment.id]: parseFloat(value)
+                                        }));
+                                      }}
+                                    >
+                                      <SelectTrigger className={`w-28 ${isSimulated ? 'border-primary' : ''}`}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {gradeOptions.map((grade) => (
+                                          <SelectItem 
+                                            key={grade.label} 
+                                            value={grade.gradePoint.toFixed(2)}
+                                          >
+                                            {grade.label} ({grade.gradePoint.toFixed(2)})
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <Badge variant={isSimulated ? 'default' : 'outline'}>
+                                      {simulatedPoint.toFixed(2)}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
 
-                {enrollments.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No enrolled subjects to simulate
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                        {semesterEnrollments.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No subjects in this semester
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center mt-4 pt-4 border-t">
+                          <p className="text-sm text-muted-foreground">
+                            Credits: {activeSemester.totalCredits} • Actual GPA: {activeSemester.gpa.toFixed(2)}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              // Reset simulated grades for this semester
+                              const resetGrades = { ...simulatedGradePoints };
+                              semesterEnrollments.forEach(e => {
+                                delete resetGrades[e.id];
+                              });
+                              setSimulatedGradePoints(resetGrades);
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            Reset Semester
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+              </>
+            ) : (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <Calculator className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No semester data available</p>
+                  <p className="text-sm">The simulator will be available once you have enrolled subjects</p>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Feedback Tab */}
