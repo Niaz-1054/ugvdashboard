@@ -16,11 +16,13 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole } from '@/lib/supabase-types';
+import { useAuth } from '@/contexts/AuthContext';
 import { StudentEnrollmentPanel } from '@/components/admin/StudentEnrollmentPanel';
 import { TeacherAssignmentPanel } from '@/components/admin/TeacherAssignmentPanel';
 import { UserManagementPanel } from '@/components/admin/UserManagementPanel';
 
 export default function AdminDashboard() {
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalStudents: 0,
@@ -422,7 +424,9 @@ export default function AdminDashboard() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Admin Dashboard</h2>
+          <h2 className="text-2xl font-bold text-foreground">
+            Welcome, {profile?.full_name || 'Admin'}
+          </h2>
           <p className="text-muted-foreground">Manage the academic system</p>
         </div>
 

@@ -228,7 +228,9 @@ export default function StudentDashboard() {
       <div className="space-y-6">
         <div className="flex justify-between items-start">
           <div>
-            <h2 className="text-2xl font-bold text-foreground">Student Dashboard</h2>
+            <h2 className="text-2xl font-bold text-foreground">
+              Welcome, {profile?.full_name || 'Student'}
+            </h2>
             <p className="text-muted-foreground">
               {profile?.student_id && `Student ID: ${profile.student_id}`}
             </p>
