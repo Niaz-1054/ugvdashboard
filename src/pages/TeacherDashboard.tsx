@@ -17,7 +17,7 @@ import { SubjectAnalytics } from '@/components/teacher/SubjectAnalytics';
 import { useGradeDrafts } from '@/hooks/useGradeDrafts';
 
 export default function TeacherDashboard() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [selectedAssignment, setSelectedAssignment] = useState<string>('');
@@ -232,7 +232,9 @@ export default function TeacherDashboard() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Teacher Dashboard</h2>
+          <h2 className="text-2xl font-bold text-foreground">
+            Welcome, {profile?.full_name || 'Teacher'}
+          </h2>
           <p className="text-muted-foreground">Manage your assigned subjects and enter student grades</p>
         </div>
 
